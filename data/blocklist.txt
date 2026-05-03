@@ -1,0 +1,7 @@
+# Creator opt-out blocklist
+# One Instagram handle per line (no @, no comments after the handle)
+# Lines starting with # are ignored.
+#
+# Example:
+# someuser
+# anotherhandle

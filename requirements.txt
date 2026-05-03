@@ -1,0 +1,49 @@
+# ============================================
+# Core
+# ============================================
+python-dotenv>=1.0.1
+pyyaml>=6.0.2
+requests>=2.32.3
+tenacity>=9.0.0
+
+# ============================================
+# Instagram / Reel discovery + download
+# ============================================
+yt-dlp>=2024.10.7
+instaloader>=4.13.1
+
+# ============================================
+# AI — NVIDIA NIM (OpenAI-compatible endpoint)
+# ============================================
+openai>=1.51.0
+
+# ============================================
+# ElevenLabs TTS
+# ============================================
+elevenlabs>=1.9.0
+
+# ============================================
+# Video/Audio processing
+# FFmpeg must be installed system-wide
+# ============================================
+ffmpeg-python>=0.2.0
+moviepy>=1.0.3
+Pillow>=10.4.0
+numpy>=1.26.4
+
+# ============================================
+# Optional: subject detection for tracking arrows
+# ============================================
+opencv-python-headless>=4.10.0.84
+
+# ============================================
+# YouTube upload
+# ============================================
+google-api-python-client>=2.149.0
+google-auth-oauthlib>=1.2.1
+google-auth-httplib2>=0.2.0
+
+# ============================================
+# Copyright-free stock sources (optional APIs)
+# ============================================
+# pexels-api and pixabay use plain HTTP, no SDK needed

@@ -1,0 +1,150 @@
+# ============================================
+# AutoReelsToYouTube — Configuration
+# Edit this file to customize behavior.
+# ============================================
+
+project:
+  name: AutoReelsToYouTube
+  language: en
+  format: shorts          # shorts | longform | both
+  timezone: Asia/Dhaka    # used for humanized scheduling
+
+# --------------------------------------------
+# NICHES — multi-niche rotation
+# Each niche has keywords used for Reel discovery
+# and a default "vibe" for script tone + music.
+# --------------------------------------------
+niches:
+  - name: motivation
+    keywords: [motivation, mindset, success, discipline, inspiration]
+    tone: powerful, inspiring, urgent
+    music_style: epic, cinematic, uplifting
+
+  - name: psychology_facts
+    keywords: [psychology, human behavior, mind facts, brain hacks]
+    tone: curious, intriguing, factual
+    music_style: mysterious, ambient
+
+  - name: tech_facts
+    keywords: [tech facts, ai, gadgets, future tech, science]
+    tone: exciting, futuristic, informative
+    music_style: electronic, tech
+
+  - name: life_hacks
+    keywords: [life hack, tips and tricks, productivity, diy]
+    tone: friendly, helpful, clear
+    music_style: upbeat, positive
+
+  - name: fitness
+    keywords: [fitness, workout, health tips, gym]
+    tone: energetic, motivating
+    music_style: high-energy, rock, edm
+
+# --------------------------------------------
+# SOURCES
+# --------------------------------------------
+sources:
+  instagram:
+    enabled: true
+    exclude_verified: true        # skip blue-tick corporate accounts
+    min_views: 100000
+    min_like_ratio: 0.03          # likes / views
+    max_age_days: 30
+  copyright_free:
+    enabled: true
+    providers: [pexels, pixabay]  # both have free APIs
+    per_run_quota: 3              # how many CC videos per daily batch
+
+# --------------------------------------------
+# DISCOVERY FILTERS
+# --------------------------------------------
+filters:
+  min_duration_sec: 10
+  max_duration_sec: 60
+  skip_if_contains_brand_logos: true
+  skip_if_contains_celebrities: true
+  blocklist_file: data/blocklist.txt
+
+# --------------------------------------------
+# AI (NVIDIA NIM)
+# --------------------------------------------
+ai:
+  endpoint: https://integrate.api.nvidia.com/v1
+  model: zai-org/glm-4.6          # will auto-fallback if unavailable
+  fallback_model: meta/llama-3.1-70b-instruct
+  temperature: 0.7
+  max_tokens: 800
+
+# --------------------------------------------
+# VOICEOVER (ElevenLabs)
+# --------------------------------------------
+voiceover:
+  voice_id: pNInz6obpgDQGcFmaJgB  # Adam
+  model: eleven_multilingual_v2
+  stability: 0.5
+  similarity_boost: 0.75
+  style: 0.4
+  speaker_boost: true
+
+# --------------------------------------------
+# SCRIPT
+# --------------------------------------------
+script:
+  hook_duration_sec: 3            # strong hook in first 3 seconds
+  max_words_per_second: 2.5       # for sync with video length
+  style: informative, professional, engaging
+
+# --------------------------------------------
+# VIDEO EDITING
+# --------------------------------------------
+editing:
+  resolution: 1080x1920           # vertical for Shorts
+  fps: 30
+  filters:
+    saturation: 1.25
+    sharpen: true
+    hdr_look: true
+    upscale_to_4k: false          # keep off to save render time
+  subject_tracking:
+    enabled: true
+    style: circle                 # circle | arrow | auto
+    only_when_useful: true        # AI decides per-scene
+  hook_overlay:
+    enabled: true
+    font_size: 72
+    position: center-top
+  background_music:
+    enabled: true
+    volume_db: -18                # under voiceover
+    source: youtube_audio_library
+
+# --------------------------------------------
+# UPLOAD SCHEDULE
+# --------------------------------------------
+upload:
+  videos_per_day: 6
+  humanize: true
+  window_start_hour: 8            # 08:00 local
+  window_end_hour: 23             # 23:00 local
+  jitter_minutes: 35              # ± random offset per slot
+  description_template: |
+    {ai_description}
+
+    ━━━━━━━━━━━━━━━━━━━━
+    🎬 Credit: Original video by @{creator_handle}
+    🔗 Source: {source_url}
+    ━━━━━━━━━━━━━━━━━━━━
+
+    Disclaimer: All credit goes to the original creator.
+    If you are the owner and want this video removed,
+    please contact: {owner_email}
+
+    #shorts #{niche} {hashtags}
+
+# --------------------------------------------
+# SAFETY
+# --------------------------------------------
+safety:
+  duplicate_check: true           # hash videos to prevent reposts
+  dry_run: true                   # SET TO false ONLY AFTER TESTING
+  max_retries: 3

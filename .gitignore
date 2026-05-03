@@ -1,0 +1,79 @@
+# ============================================
+# SECRETS — NEVER COMMIT THESE
+# ============================================
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+client_secret*.json
+credentials.json
+token.json
+token.pickle
+youtube_token.json
+instagram_session.json
+secrets/
+
+# ============================================
+# DATA — too large / private
+# ============================================
+data/downloads/
+data/processed/
+data/tracker.db
+data/*.db
+data/*.sqlite
+*.mp4
+*.mp3
+*.wav
+*.mov
+*.mkv
+
+# Keep music library structure but ignore audio files
+data/music/*.mp3
+data/music/*.wav
+!data/music/.gitkeep
+
+# ============================================
+# PYTHON
+# ============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+env/
+ENV/
+
+# ============================================
+# IDE / OS
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============================================
+# LOGS
+# ============================================
+*.log
+logs/

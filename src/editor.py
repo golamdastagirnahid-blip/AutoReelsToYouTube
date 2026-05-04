@@ -41,95 +41,58 @@ MUSIC_DIR.mkdir(parents=True, exist_ok=True)
 def _video_filter_chain(saturation: float, sharpen: bool, hdr_look: bool,
                         target_w: int, target_h: int,
                         zoom_pan: bool = True,
-                        denoise: bool = True,
-                        cinematic_grade: bool = True,
-                        film_grain: bool = True,
-                        progress_bar_duration: Optional[float] = None) -> str:
-    """Premium cinematic filter chain.
+                        denoise: bool = True) -> str:
+    """Cinematic filter chain: denoise → scale→crop → grade → zoom → sharpen.
 
-    Stack (order matters — grade before sharpen, grain before progress bar):
-
-        1. Denoise              (cleans compression artifacts)
-        2. Scale + center-crop  (Lanczos upscale, 9:16 crop)
-        3. Ken Burns zoom       (subtle 6% zoom over clip)
-        4. Base grade           (saturation, contrast, gamma)
-        5. Teal-orange LUT      (Hollywood blockbuster look via curves)
-        6. HDR tone-map         (S-curve for punch)
-        7. Vignette             (cinematic edge falloff)
-        8. Film grain           (subtle texture — avoids sterile look)
-        9. Sharpen              (edge clarity — AFTER grain)
-       10. Progress bar         (retention-boosting, if duration known)
-       11. yuv420p              (broadcast-safe output)
+    Filter order matters — grading first, then sharpening last keeps edges crisp
+    without amplifying noise.
     """
     parts: list[str] = []
 
-    # 1. Denoise
+    # Pre-denoise (lightweight) — cleans social-media compression artifacts
     if denoise:
         parts.append("hqdn3d=1.5:1.5:6:6")
 
-    # 2. Scale + crop
+    # Lanczos for high-quality upscale of low-res sources, then center-crop
     parts.append(
         f"scale={target_w}:{target_h}:flags=lanczos:force_original_aspect_ratio=increase,"
         f"crop={target_w}:{target_h}"
     )
 
-    # 3. Ken Burns zoom-pan
+    # Subtle Ken Burns zoom — 6% zoom over the clip duration
+    # Using zoompan with d=1 frame style won't work; instead use scale+pad approach.
+    # Simpler: gentle constant zoom via crop with shrinking box.
     if zoom_pan:
+        # 1.00 → 1.06 over time using `t` variable inside crop is unreliable;
+        # use minterpolate-friendly steady micro-zoom via scale/zoom-pan filter.
         parts.append(
             f"zoompan=z='min(zoom+0.0008,1.06)':d=1:"
             f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
             f"s={target_w}x{target_h}:fps=30"
         )
 
-    # 4. Base grade — saturation, contrast, mild warmth in shadows
+    # Cinematic colour grade:
+    #   - Lift saturation slightly
+    #   - Boost contrast
+    #   - Mild gamma to lift midtones
+    #   - Slight warm tone (red+, blue-) for filmic feel
     parts.append(
-        f"eq=saturation={saturation:.2f}:contrast=1.10:brightness=0.02"
-        f":gamma=1.05:gamma_r=1.02:gamma_b=0.98"
+        f"eq=saturation={saturation:.2f}:contrast=1.10:brightness=0.02:gamma=1.05:gamma_r=1.02:gamma_b=0.98"
     )
 
-    # 5. CINEMATIC TEAL-ORANGE GRADE — the Hollywood look.
-    # Lifts shadows into cool teal while pushing highlights warm orange.
-    # This is what separates amateur from "feels-expensive" footage.
-    if cinematic_grade:
-        parts.append(
-            "curves="
-            "r='0/0 0.25/0.22 0.5/0.55 0.75/0.82 1/1':"        # warm mids
-            "g='0/0 0.25/0.22 0.5/0.50 0.75/0.78 1/0.98':"     # slight desat on green
-            "b='0/0.05 0.3/0.38 0.5/0.48 0.75/0.70 1/0.92'"    # teal shadows, compressed highlights
-        )
-
-    # 6. HDR master S-curve — adds punch & contrast
     if hdr_look:
+        # Pseudo-HDR: tone-map style S-curve + selective shadow lift
         parts.append("curves=master='0/0 0.25/0.18 0.5/0.55 0.75/0.85 1/1'")
 
-    # 7. Vignette — slightly stronger (PI/4) than stock for cinematic framing
-    parts.append("vignette=angle=PI/4")
+    # Subtle vignette for cinematic framing
+    parts.append("vignette=PI/5")
 
-    # 8. Film grain — very subtle temporal noise so the video doesn't look
-    # sterile/plastic. `alls=8` is strength, `allf=t+u` means temporal+uniform
-    # so each frame gets unique grain (looks natural, not static).
-    if film_grain:
-        parts.append("noise=alls=8:allf=t+u")
-
-    # 9. Sharpen LAST — edge clarity, applied after grain so grain doesn't get
-    # amplified into harsh dots.
+    # Sharpen LAST so it doesn't amplify noise
     if sharpen:
-        parts.append(
-            "unsharp=luma_msize_x=5:luma_msize_y=5:luma_amount=1.0"
-            ":chroma_msize_x=3:chroma_msize_y=3:chroma_amount=0.5"
-        )
+        parts.append("unsharp=luma_msize_x=5:luma_msize_y=5:luma_amount=1.0"
+                     ":chroma_msize_x=3:chroma_msize_y=3:chroma_amount=0.5")
 
-    # 10. PROGRESS BAR at the very bottom — retention-boosting visual cue
-    # that tells viewers how much is left. Warm orange to match the teal/
-    # orange grade. 4px tall, animated left→right over the full duration.
-    if progress_bar_duration and progress_bar_duration > 0:
-        dur = float(progress_bar_duration)
-        parts.append(
-            f"drawbox=x=0:y=ih-6:w='min(iw*t/{dur:.3f}\\,iw)':h=4"
-            f":color=0xff8a3c@0.9:t=fill"
-        )
-
-    # 11. Output format
+    # Final output format
     parts.append("format=yuv420p")
     return ",".join(parts)
 
@@ -179,22 +142,15 @@ def _hook_drawtext(hook_text: str, duration: float = 3.0,
     # Use 'text=' with quoted value — wrap newline as %{eif:...} is overkill,
     # easier to use the `text` arg with literal `\n` which drawtext renders.
     safe = wrapped.replace("\\", "\\\\").replace(":", r"\:").replace("'", r"\'")
-    # Premium hook animation:
-    #   - Y position uses CUBIC EASE-OUT (pow(1-t,3)) — starts fast, settles
-    #     gracefully. 50px drop-in feels more impactful than linear 30px.
-    #   - Alpha fades in over 0.1s (snappier punch) and fades out over 0.3s.
-    #   - Chunky double outline (black border + warm-orange glow) for
-    #     contrast against any background.
     return (
         f"drawtext=text='{safe}'"
-        f":fontcolor=white:fontsize={font_size}"
-        f":borderw=7:bordercolor=black"
-        f":shadowx=4:shadowy=4:shadowcolor=0xff8a3c@0.85"   # warm-orange glow shadow
-        f":line_spacing=12"
+        f":fontcolor=white:fontsize={font_size}:borderw=6:bordercolor=black"
+        f":shadowx=3:shadowy=3:shadowcolor=black@0.7"
+        f":line_spacing=10"
         f":x=(w-text_w)/2"
-        # Cubic ease-out drop-in from 50px above over 0.35s, then static at h*0.18
-        f":y='h*0.18 + 50*pow(max(0\\,1-t/0.35)\\,3)'"
-        f":alpha='if(lt(t,0.1),t/0.1,if(gt(t,{duration}-0.3),max(0,({duration}-t)/0.3),1))'"
+        # 18% from top dodges phone notch + Shorts top UI bar
+        f":y='h*0.18 + 30*max(0,1-(t/0.4))'"
+        f":alpha='if(lt(t,0.2),t/0.2,if(gt(t,{duration}-0.3),max(0,({duration}-t)/0.3),1))'"
         f":enable='between(t,0,{duration})'"
     )
 
@@ -427,13 +383,8 @@ def edit_video(
     vo_dur = raw_vo_dur + 1.0
 
     target_w, target_h = target_resolution
-    vf = _video_filter_chain(
-        saturation, sharpen, hdr_look, target_w, target_h,
-        zoom_pan=zoom_pan,
-        # Pass the VO duration so the progress bar animates left→right over
-        # exactly the watched portion (minus the 1.0s tail hold at the end).
-        progress_bar_duration=raw_vo_dur,
-    )
+    vf = _video_filter_chain(saturation, sharpen, hdr_look, target_w, target_h,
+                             zoom_pan=zoom_pan)
     hook = _hook_drawtext(hook_text)
     if hook:
         vf = f"{vf},{hook}"

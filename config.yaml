@@ -201,13 +201,8 @@ editing:
   resolution: 1080x1920           # vertical for Shorts
   fps: 30
   multiclip:
-    enabled: false                # DISABLED — script-targeted discovery was
-                                  # slow (~2 min/video) and multiclip ffmpeg
-                                  # occasionally failed. Single-clip render
-                                  # with the premium cinematic grade below
-                                  # looks just as professional and is 3-4x
-                                  # faster + bulletproof.
-    target_clips: 5               # (kept for when you re-enable multiclip)
+    enabled: true                 # stitch 2-8 clips with crossfades (pro look)
+    target_clips: 5               # how many clips to use in the final video
     fade_duration_sec: 0.4        # crossfade length between clips
     min_clips_for_multi: 2        # fewer than this → single-clip mode
   transition_sfx:

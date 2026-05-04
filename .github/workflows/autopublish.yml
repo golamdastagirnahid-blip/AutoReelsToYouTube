@@ -50,12 +50,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Restore tracker DB (if cached)
+      - name: Restore tracker DB + produced videos (if cached)
+        # CRITICAL: also cache data/processed/ because GitHub Actions runners
+        # are stateless. If we don't persist the MP4s, videos produced in run A
+        # cannot be uploaded in run B (when their scheduled slot fires).
         uses: actions/cache@v4
         with:
-          path: data/tracker.db
-          key: tracker-db-${{ github.run_id }}
+          path: |
+            data/tracker.db
+            data/processed
+            data/sfx
+          key: autoreels-state-${{ github.run_id }}
           restore-keys: |
+            autoreels-state-
             tracker-db-
 
       - name: Run pipeline

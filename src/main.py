@@ -546,7 +546,12 @@ def upload_due(cfg: dict, secrets: Secrets, tracker: Tracker) -> int:
         vid = int(row["id"])
         edited_path = row["edited_path"]
         if not edited_path or not Path(edited_path).exists():
-            log.warning("Video #%d edited file missing", vid)
+            # Orphaned row: the MP4 was lost (typically stateless-CI filesystem
+            # wipe between runs). Mark as failed so we stop retrying it every
+            # time this cron fires.
+            log.warning("Video #%d edited file missing — marking as failed", vid)
+            tracker.update(vid, status="failed")
+            tracker.mark_posted(int(row["schedule_id"]))   # clear the slot too
             continue
         script_obj = json.loads(row["script_text"] or "{}")
 
@@ -577,6 +582,13 @@ def upload_due(cfg: dict, secrets: Secrets, tracker: Tracker) -> int:
                            youtube_url=f"https://youtube.com/shorts/{yid}")
             tracker.mark_posted(int(row["schedule_id"]))
             posted += 1
+            # Delete the MP4 after a successful upload so the GitHub Actions
+            # cache doesn't grow unbounded over weeks of daily runs.
+            try:
+                Path(edited_path).unlink(missing_ok=True)
+                log.info("Cleaned up %s after upload", Path(edited_path).name)
+            except OSError as e:
+                log.warning("Could not delete %s: %s", edited_path, e)
     return posted
 
 

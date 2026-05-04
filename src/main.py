@@ -596,15 +596,58 @@ def upload_due(cfg: dict, secrets: Secrets, tracker: Tracker) -> int:
 # CLI
 # ============================================================
 
+def upload_now(cfg: dict, secrets: Secrets, tracker: Tracker) -> int:
+    """Bypass the upload window — schedule every 'edited' video for `now`
+    and immediately upload all due rows.
+
+    Useful for testing / manual catch-up. The normal `full` flow uses
+    `schedule_due` which spreads slots across an upload window.
+    """
+    now = _utc_now()
+    edited = tracker.by_status("edited", limit=cfg["upload"]["videos_per_day"])
+    log.info("upload-now: %d 'edited' video(s) ready", len(edited))
+    for video in edited:
+        tracker.add_schedule(int(video["id"]), now)
+    return upload_due(cfg, secrets, tracker)
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="autoreels")
-    parser.add_argument("mode", choices=["produce", "upload", "full"])
+    parser.add_argument(
+        "mode",
+        choices=["produce", "upload", "full", "check", "upload-now"],
+        help=("produce: render only | upload: send due ones to YouTube | "
+              "full: produce+schedule+upload | check: verify all credentials "
+              "& APIs | upload-now: skip schedule window, upload immediately"),
+    )
     parser.add_argument("--niche", default=None, help="niche name (default: random)")
     parser.add_argument("--count", type=int, default=1, help="how many to produce")
+    parser.add_argument(
+        "--skip-health-check", action="store_true",
+        help="skip the pre-flight credential check (faster local iteration)",
+    )
     args = parser.parse_args(argv)
 
     cfg = load_config()
     secrets = Secrets.load()
+
+    # ---- Pre-flight health check ----
+    # Always runs unless skipped; for `check` mode it IS the work.
+    if args.mode == "check":
+        from src.health import run as health_run
+        ok = health_run(secrets, raise_on_required_failure=False)
+        return 0 if ok else 1
+
+    if not args.skip_health_check:
+        from src.health import run as health_run
+        try:
+            health_run(secrets, raise_on_required_failure=True)
+        except RuntimeError as e:
+            log.error("Pre-flight check failed: %s", e)
+            log.error("Run `python -m src.main check` for full report. "
+                     "Use --skip-health-check to bypass.")
+            return 1
+
     log.info(secrets.summary())
     tracker = Tracker()
 
@@ -616,6 +659,11 @@ def main(argv: list[str]) -> int:
     if args.mode in ("upload", "full"):
         n = upload_due(cfg, secrets, tracker)
         log.info("Uploaded %d video(s)", n)
+
+    if args.mode == "upload-now":
+        n = upload_now(cfg, secrets, tracker)
+        log.info("upload-now: posted %d video(s)", n)
+
     return 0
 
 

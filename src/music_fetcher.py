@@ -155,6 +155,11 @@ def _search(music_style: str, client_id: str, limit: int = 10) -> list[dict]:
     # Jamendo wants '+'-separated tag list for OR match
     tag_query = "+".join(tags[:3])
 
+    # License filter (Jamendo semantics):
+    #   - omitting `ccsa` means "either CC BY or CC BY-SA accepted"
+    #   - `ccnd=false` means "exclude no-derivatives clause"
+    #   - `ccnc=false` means "exclude non-commercial clause"
+    # Net effect: only commercial-use-friendly tracks (CC BY + CC BY-SA).
     params = {
         "client_id": client_id,
         "format": "json",
@@ -164,14 +169,25 @@ def _search(music_style: str, client_id: str, limit: int = 10) -> list[dict]:
         "audioformat": "mp32",          # 192kbps mp3
         "audiodlformat": "mp32",
         "order": "popularity_total",    # most-downloaded = likely best mastered
-        "ccsa": "true",                 # allow CC-SA
         "ccnd": "false",                # disallow no-derivatives
         "ccnc": "false",                # disallow non-commercial
     }
     r = requests.get(JAMENDO_API, params=params, timeout=JAMENDO_TIMEOUT)
     r.raise_for_status()
     data = r.json()
-    return data.get("results") or []
+    results = data.get("results") or []
+
+    # Fallback: if compound OR-tag query returns nothing, retry with just
+    # the first tag. Some Jamendo style words ("uplifting") are sparse.
+    if not results and len(tags) > 1:
+        log.debug("Jamendo: 0 hits for tags=%s, retrying with %r only",
+                  tag_query, tags[0])
+        params["tags"] = tags[0]
+        r = requests.get(JAMENDO_API, params=params, timeout=JAMENDO_TIMEOUT)
+        r.raise_for_status()
+        results = (r.json() or {}).get("results") or []
+
+    return results
 
 
 def _download_track(track: dict, dest_dir: Path) -> Optional[Path]:
@@ -187,7 +203,9 @@ def _download_track(track: dict, dest_dir: Path) -> Optional[Path]:
     safe = _sanitize(f"{artist}_{title}_{track_id}")
     mp3_path = dest_dir / f"{safe}.mp3"
     if mp3_path.exists():
-        return mp3_path
+        # Already cached — caller should treat this as "skip, try next track"
+        # so the per-call counter reflects only NEWLY downloaded tracks.
+        return None
 
     try:
         with requests.get(audio_url, stream=True, timeout=DOWNLOAD_TIMEOUT) as resp:
@@ -205,12 +223,18 @@ def _download_track(track: dict, dest_dir: Path) -> Optional[Path]:
                 pass
         return None
 
-    # Write attribution sidecar (`<file>.mp3.json`)
-    license_url = (
-        track.get("license_ccurl")
-        or (track.get("licenses", [{}])[0] if track.get("licenses") else {}).get("url", "")
-        or "https://creativecommons.org/licenses/by/3.0/"
-    )
+    # Write attribution sidecar (`<file>.mp3.json`).
+    # `licenses` can come back as a list[dict], a single dict, or be missing
+    # entirely depending on the track. Be defensive.
+    license_url = track.get("license_ccurl") or ""
+    if not license_url:
+        lic = track.get("licenses")
+        if isinstance(lic, list) and lic and isinstance(lic[0], dict):
+            license_url = lic[0].get("url", "")
+        elif isinstance(lic, dict):
+            license_url = lic.get("url", "")
+    if not license_url:
+        license_url = "https://creativecommons.org/licenses/by/3.0/"
     license_name = _license_name_from_url(license_url)
     attr: Attribution = {
         "artist": artist,
@@ -256,15 +280,21 @@ def _license_name_from_url(url: str) -> str:
     return "Creative Commons"
 
 
-# CLI self-test: python -m src.music_fetcher
+# CLI self-test: python -m src.music_fetcher [music_style] [niche]
 if __name__ == "__main__":
     import os
     import sys
+    # Load .env (same loader the rest of the pipeline uses) so a developer
+    # who has JAMENDO_CLIENT_ID in .env can run this standalone.
+    from dotenv import load_dotenv
+    _PROJECT = Path(__file__).resolve().parents[1]
+    load_dotenv(_PROJECT / ".env", override=False)
+
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s | %(levelname)s | %(message)s")
     cid = os.getenv("JAMENDO_CLIENT_ID")
     if not cid:
-        print("Set JAMENDO_CLIENT_ID env var first.", file=sys.stderr)
+        print("Set JAMENDO_CLIENT_ID in .env or env var first.", file=sys.stderr)
         raise SystemExit(1)
     _PROJECT = Path(__file__).resolve().parents[1]
     style = sys.argv[1] if len(sys.argv) > 1 else "epic, cinematic, uplifting"

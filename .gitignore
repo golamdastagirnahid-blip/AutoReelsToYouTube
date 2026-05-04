@@ -30,10 +30,14 @@ data/*.sqlite
 *.mov
 *.mkv
 
-# Keep music library structure but ignore audio files
-data/music/*.mp3
-data/music/*.wav
+# Keep music library structure but ignore audio files + their
+# Jamendo attribution sidecars (regenerated automatically per fetch)
+data/music/**/*.mp3
+data/music/**/*.wav
+data/music/**/*.mp3.json
+data/music/**/*.wav.json
 !data/music/.gitkeep
+!data/music/README.md
 
 # ============================================
 # PYTHON

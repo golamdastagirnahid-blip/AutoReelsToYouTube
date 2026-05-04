@@ -354,7 +354,12 @@ def produce_one(cfg: dict, secrets: Secrets, tracker: Tracker,
                            duration_sec=analysis.get("duration_sec"))
 
             # 3. Script
-            duration = float(analysis.get("duration_sec") or 30)
+            # Cap target duration to a Shorts-friendly range. The source clip
+            # might be 60-90s of stock footage, but YouTube Shorts max out at
+            # 60s, and tight 22-40s reels retain better. Floor at 22s so the
+            # script writer can fit a proper hook + body + CTA loopback.
+            raw_duration = float(analysis.get("duration_sec") or 30)
+            duration = min(40.0, max(22.0, raw_duration))
             script_obj = write_script(
                 analysis=analysis,
                 duration_sec=duration,
@@ -386,8 +391,12 @@ def produce_one(cfg: dict, secrets: Secrets, tracker: Tracker,
             vo = fit_audio_to_duration(vo, duration)
             tracker.update(vid, status="voiced", voiceover_path=str(vo))
 
-            # Actual VO duration drives video length for tight A/V sync
-            vo_duration = audio_duration(vo) or duration
+            # Actual VO duration drives video length for tight A/V sync.
+            # Add a 0.5s tail buffer: loudnorm's 2-pass normalisation can
+            # shift the encoded duration by ~50-100ms, which would otherwise
+            # clip the final syllable at the very end. The buffer becomes
+            # natural breath-room silence in the final video.
+            vo_duration = (audio_duration(vo) or duration) + 0.5
 
             # 5. Captions
             edit_cfg = cfg["editing"]

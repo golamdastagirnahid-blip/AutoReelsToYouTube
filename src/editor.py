@@ -312,6 +312,13 @@ def edit_video(
     if out.exists():
         out.unlink()
 
+    # Probe the voiceover duration so we can force the final video to match
+    # exactly — preventing the audio from being clipped if the source video
+    # is shorter than the VO. Add a 0.5s tail so loudnorm's timing drift
+    # never clips the last syllable.
+    from src.voiceover import audio_duration
+    vo_dur = (audio_duration(voiceover_audio) or 30.0) + 0.5
+
     target_w, target_h = target_resolution
     vf = _video_filter_chain(saturation, sharpen, hdr_look, target_w, target_h,
                              zoom_pan=zoom_pan)
@@ -326,6 +333,11 @@ def edit_video(
         if fonts_dir and fonts_dir.exists() and any(fonts_dir.iterdir()):
             sub_filter += f":fontsdir='{_ffmpeg_escape_path(fonts_dir)}'"
         vf = f"{vf},{sub_filter}"
+
+    # Hold the last frame for up to 4s if needed so the video stream is never
+    # shorter than the VO. Combined with -t below, both streams end at the
+    # same point and the audio is never truncated.
+    vf = f"{vf},tpad=stop_mode=clone:stop_duration=4"
 
     music = _pick_music(niche)
     cmd = ["ffmpeg", "-y", "-i", str(source_video), "-i", str(voiceover_audio)]
@@ -376,11 +388,14 @@ def edit_video(
         "keyint=60:min-keyint=60:scenecut=0",  # smooth seeking
         # AAC 192 kbps stereo — YouTube's recommended audio for Shorts
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
-        "-shortest",
+        # Force EXACT duration (= VO length). Replaces -shortest, which would
+        # truncate the VO whenever the source clip was shorter than the audio.
+        "-t", f"{vo_dur:.3f}",
         "-movflags", "+faststart",
         str(out),
     ]
 
+    log.info("Single-clip render: total %.2fs → %s", vo_dur, out.name)
     try:
         subprocess.run(cmd, capture_output=True, check=True)
     except subprocess.CalledProcessError as e:
@@ -542,8 +557,10 @@ def edit_video_multiclip(
         seg_duration = (target_total_duration + (n - 1) * fade_duration) / n
     if not seg_duration:
         seg_duration = 4.0
-    # Clamp to viewer-friendly range (engaging pacing without feeling jumpy)
-    seg_duration = max(2.5, min(7.0, seg_duration))
+    # Clamp to viewer-friendly range (engaging pacing without feeling jumpy).
+    # Upper bound used to be 7.0 but that truncated VOs longer than ~33s with
+    # 5 segments. We bump it so the segment math can always fit the VO.
+    seg_duration = max(2.5, min(12.0, seg_duration))
 
     # 1+2. Pick best segments and normalize
     segs: list[Path] = []
@@ -605,7 +622,14 @@ def edit_video_multiclip(
             sub_filter += f":fontsdir='{_ffmpeg_escape_path(fonts_dir)}'"
         extra = f"{extra},{sub_filter}"
 
-    final_video_filter = f"[{last_label}]{extra}[vfinal]"
+    # tpad pads the video stream by holding the last frame for up to 4s,
+    # guaranteeing the video is never shorter than the VO. We then trim both
+    # streams to exactly `total_dur` via the -t flag below.
+    final_video_filter = (
+        f"[{last_label}]{extra},"
+        f"tpad=stop_mode=clone:stop_duration=4"
+        f"[vfinal]"
+    )
     full_filter = f"{xfade_filter};{final_video_filter}"
 
     # 5. Audio: VO + optional music + transition swooshes — all loudness-normalised
@@ -697,13 +721,17 @@ def edit_video_multiclip(
         "-tune", "film",
         "-x264-params", "keyint=60:min-keyint=60:scenecut=0",
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
-        "-shortest",
+        # Force EXACT total duration. Replaces -shortest, which used to cut
+        # the VO whenever the visual stream was shorter than the audio. The
+        # tpad filter above ensures the video reaches at least total_dur, and
+        # this -t makes both streams end at exactly total_dur.
+        "-t", f"{total_dur:.3f}",
         "-movflags", "+faststart",
         str(out),
     ]
 
-    log.info("Multiclip render: %d segments × %.2fs (fade %.2fs) → %s",
-             n_used, seg_duration, fade_duration, out.name)
+    log.info("Multiclip render: %d segments × %.2fs (fade %.2fs, total %.2fs) → %s",
+             n_used, seg_duration, fade_duration, total_dur, out.name)
     try:
         subprocess.run(cmd, capture_output=True, check=True, timeout=600)
     except subprocess.CalledProcessError as e:

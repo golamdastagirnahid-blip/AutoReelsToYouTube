@@ -482,6 +482,8 @@ def produce_one(cfg: dict, secrets: Secrets, tracker: Tracker,
                         music_volume_db=edit_cfg["background_music"]["volume_db"],
                         music_target_lufs=edit_cfg["background_music"].get(
                             "target_lufs", -22.0),
+                        music_style=niche.get("music_style", ""),
+                        jamendo_client_id=secrets.jamendo_client_id,
                         captions_ass=captions_path,
                         fonts_dir=fonts_dir,
                         fade_duration=fade_duration,
@@ -505,6 +507,8 @@ def produce_one(cfg: dict, secrets: Secrets, tracker: Tracker,
                     music_volume_db=edit_cfg["background_music"]["volume_db"],
                     music_target_lufs=edit_cfg["background_music"].get(
                         "target_lufs", -22.0),
+                    music_style=niche.get("music_style", ""),
+                    jamendo_client_id=secrets.jamendo_client_id,
                     captions_ass=captions_path,
                     fonts_dir=fonts_dir,
                 )
@@ -581,6 +585,25 @@ def upload_due(cfg: dict, secrets: Secrets, tracker: Tracker) -> int:
             niche=niche,
             hashtags=hashtags,
         )
+
+        # If the editor cached Jamendo CC music for this video, append the
+        # artist credit to the description (required by CC-BY / CC-SA).
+        music_sidecar = Path(str(edited_path) + ".music.json")
+        if music_sidecar.exists():
+            try:
+                music_attr = json.loads(music_sidecar.read_text(encoding="utf-8"))
+                credit = (
+                    f"\n────────────────────\n"
+                    f"🎵 Music: \"{music_attr.get('title', 'Untitled')}\" by "
+                    f"{music_attr.get('artist', 'Unknown')}\n"
+                    f"License: {music_attr.get('license_name', 'CC')} "
+                    f"({music_attr.get('license_url', '')})\n"
+                    f"Source: {music_attr.get('track_url', '')}\n"
+                )
+                description += credit
+            except Exception as e:
+                log.debug("Could not read music sidecar %s: %s",
+                          music_sidecar, e)
 
         yid = upload_short(
             Path(edited_path),

@@ -48,6 +48,7 @@ class Secrets:
     pexels_api_key: Optional[str]
     pixabay_api_key: Optional[str]
     unsplash_access_key: Optional[str]
+    jamendo_client_id: Optional[str]
     instagram_username: Optional[str]
     instagram_password: Optional[str]
     owner_contact_email: str
@@ -66,6 +67,7 @@ class Secrets:
             pexels_api_key=_get("PEXELS_API_KEY", required=False),
             pixabay_api_key=_get("PIXABAY_API_KEY", required=False),
             unsplash_access_key=_get("UNSPLASH_ACCESS_KEY", required=False),
+            jamendo_client_id=_get("JAMENDO_CLIENT_ID", required=False),
             instagram_username=_get("INSTAGRAM_USERNAME", required=False),
             instagram_password=_get("INSTAGRAM_PASSWORD", required=False),
             owner_contact_email=_get("OWNER_CONTACT_EMAIL", default="contact@example.com"),
@@ -84,6 +86,7 @@ class Secrets:
             f"  Pexels       : {_mask(self.pexels_api_key)}\n"
             f"  Pixabay      : {_mask(self.pixabay_api_key)}\n"
             f"  Unsplash     : {_mask(self.unsplash_access_key)}\n"
+            f"  Jamendo      : {_mask(self.jamendo_client_id)}\n"
             f"  Owner email  : {self.owner_contact_email}"
         )
 

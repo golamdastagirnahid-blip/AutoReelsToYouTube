@@ -1,6 +1,48 @@
 # Background Music
 
-Drop royalty-free MP3 / WAV tracks here. The editor picks one at random per video.
+You have **two options** for supplying music — both fully automated downstream:
+
+1. **Zero-effort: Jamendo auto-fetch** (recommended). Set
+   `JAMENDO_CLIENT_ID` in your env and the pipeline fetches 5
+   CC-licensed tracks per niche on the first run, caches them here,
+   and credits the artist in every video's description automatically.
+2. **Manual drop-in**. Download your own tracks from
+   YouTube Audio Library / Pixabay / Mixkit and drop them into
+   `data/music/<niche>/` — see folder layout below.
+
+Both sources coexist: Jamendo only fetches when the folder has fewer
+than 3 tracks, so anything you drop in manually is preserved and gets
+picked at random along with the auto-fetched ones.
+
+## Zero-effort: Jamendo auto-fetch
+
+1. Create a free developer account at https://devportal.jamendo.com/
+2. Click **Create new app** → copy the **client_id**
+3. Add it to your env (local `.env` or GitHub Secret): `JAMENDO_CLIENT_ID=xxxxxxxx`
+4. Next pipeline run, you'll see:
+   ```
+   INFO | src.music_fetcher | Jamendo: topping up music cache for 'motivation'…
+   INFO | src.music_fetcher | Jamendo: downloaded ArtistName — Track Title (CC BY)
+   ```
+5. Artist credit is **automatically appended** to every YouTube
+   description with the correct license + source URL (legally required
+   by CC-BY / CC-SA):
+   ```
+   ────────────────────
+   🎵 Music: "Track Title" by ArtistName
+   License: CC BY (https://creativecommons.org/licenses/by/3.0/)
+   Source: https://www.jamendo.com/track/1234567
+   ```
+
+Tag mapping per niche (from `config.yaml → niches[*].music_style`):
+
+| Niche | Jamendo tag query | Vibe |
+|---|---|---|
+| motivation | `epic+cinematic+uplifting` | hero-theme, building tension |
+| psychology_facts | `mysterious+ambient` | documentary, contemplative |
+| tech_facts | `electronic+tech` | future-forward, synthwave |
+| life_hacks | `upbeat+positive` | friendly, bouncy |
+| fitness | `high-energy+rock+edm` | workout-ready |
 
 ## Folder layout
 

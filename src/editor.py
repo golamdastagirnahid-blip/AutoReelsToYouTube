@@ -158,15 +158,47 @@ def _hook_drawtext(hook_text: str, duration: float = 3.0,
 _MUSIC_NUDGE_SHOWN = False
 
 
-def _pick_music(niche: str) -> Optional[Path]:
-    """Pick a random track from data/music/<niche>/ or data/music/.
+def _pick_music(
+    niche: str,
+    *,
+    music_style: str = "",
+    jamendo_client_id: Optional[str] = None,
+) -> Optional[Path]:
+    """Pick a random track for the niche, auto-fetching from Jamendo if set.
 
-    Returns None if no tracks found — caller renders without music. Logs a
-    one-time hint pointing at data/music/README.md.
+    Lookup order:
+        1. If `jamendo_client_id` is provided and `data/music/<niche>/` has
+           fewer than 3 tracks, pull up to 5 CC-licensed tracks tagged by
+           `music_style` from Jamendo and cache them on disk (one-time per
+           niche, idempotent on subsequent runs).
+        2. Pick a random .mp3/.wav from `data/music/<niche>/`.
+        3. Fall back to `data/music/` (niche-agnostic pool).
+        4. Return None — render with VO + SFX only.
+
+    The picked track keeps its attribution sidecar (written by the Jamendo
+    fetcher as `<track>.mp3.json`). Callers use `_music_attribution(path)`
+    to read it and append to the YouTube description.
     """
     global _MUSIC_NUDGE_SHOWN
-    candidates: list[Path] = []
     sub = MUSIC_DIR / niche
+    sub.mkdir(parents=True, exist_ok=True)
+
+    # 1. Jamendo auto-fetch (one-time per niche, no-op if cache is warm)
+    if jamendo_client_id and music_style:
+        try:
+            from src.music_fetcher import ensure_cache
+            ensure_cache(
+                niche=niche,
+                music_style=music_style,
+                client_id=jamendo_client_id,
+                dest_root=MUSIC_DIR,
+                min_tracks=3,
+                fetch_count=5,
+            )
+        except Exception as e:
+            log.warning("Jamendo auto-fetch failed: %s", e)
+
+    candidates: list[Path] = []
     if sub.exists():
         candidates += list(sub.glob("*.mp3")) + list(sub.glob("*.wav"))
     if not candidates:
@@ -175,13 +207,38 @@ def _pick_music(niche: str) -> Optional[Path]:
         if not _MUSIC_NUDGE_SHOWN:
             log.info("No background music in data/music/. See "
                      "data/music/README.md for free royalty-free sources "
-                     "(YouTube Audio Library, Pixabay, Mixkit). "
+                     "(YouTube Audio Library, Pixabay, Mixkit, Jamendo). "
                      "Rendering with voiceover + SFX only.")
             _MUSIC_NUDGE_SHOWN = True
         return None
     chosen = random.choice(candidates)
     log.info("Music: %s", chosen.relative_to(MUSIC_DIR.parent))
     return chosen
+
+
+def _write_music_sidecar(output_video: Path, music_path: Optional[Path]) -> None:
+    """Write `<video>.music.json` next to the rendered mp4 so the uploader
+    can read attribution info and append a credit to the description.
+
+    No-op if the music track has no attribution sidecar (e.g. user-provided
+    track from YouTube Audio Library, which doesn't require credit anyway).
+    """
+    if not music_path:
+        return
+    try:
+        from src.music_fetcher import attribution_for
+        attr = attribution_for(music_path)
+    except Exception:
+        attr = None
+    if not attr:
+        return
+    sidecar = output_video.with_suffix(output_video.suffix + ".music.json")
+    try:
+        import json as _json
+        sidecar.write_text(_json.dumps(attr, indent=2, ensure_ascii=False),
+                           encoding="utf-8")
+    except Exception as e:
+        log.debug("Could not write music sidecar %s: %s", sidecar, e)
 
 
 # ============================================================
@@ -304,6 +361,8 @@ def edit_video(
     hdr_look: bool = True,
     music_volume_db: float = -18.0,
     music_target_lufs: float = -22.0,
+    music_style: str = "",
+    jamendo_client_id: Optional[str] = None,
     captions_ass: Optional[Path] = None,
     fonts_dir: Optional[Path] = None,
     zoom_pan: bool = True,
@@ -343,7 +402,8 @@ def edit_video(
     # same point and the audio is never truncated.
     vf = f"{vf},tpad=stop_mode=clone:stop_duration=4"
 
-    music = _pick_music(niche)
+    music = _pick_music(niche, music_style=music_style,
+                        jamendo_client_id=jamendo_client_id)
     cmd = ["ffmpeg", "-y", "-i", str(source_video), "-i", str(voiceover_audio)]
     if music:
         cmd += ["-stream_loop", "-1", "-i", str(music)]
@@ -418,7 +478,10 @@ def edit_video(
     except subprocess.CalledProcessError as e:
         log.error("FFmpeg failed:\n%s", e.stderr.decode("utf-8", errors="ignore")[:2000])
         return None
-    return out if out.exists() else None
+    if out.exists():
+        _write_music_sidecar(out, music)
+        return out
+    return None
 
 
 # ============================================================
@@ -527,6 +590,8 @@ def edit_video_multiclip(
     hdr_look: bool = True,
     music_volume_db: float = -18.0,
     music_target_lufs: float = -22.0,
+    music_style: str = "",
+    jamendo_client_id: Optional[str] = None,
     captions_ass: Optional[Path] = None,
     fonts_dir: Optional[Path] = None,
     seg_duration: Optional[float] = None,
@@ -562,6 +627,9 @@ def edit_video_multiclip(
             target_resolution=target_resolution,
             saturation=saturation, sharpen=sharpen, hdr_look=hdr_look,
             music_volume_db=music_volume_db,
+            music_target_lufs=music_target_lufs,
+            music_style=music_style,
+            jamendo_client_id=jamendo_client_id,
             captions_ass=captions_ass, fonts_dir=fonts_dir,
             zoom_pan=True,
         )
@@ -611,6 +679,9 @@ def edit_video_multiclip(
                 target_resolution=target_resolution,
                 saturation=saturation, sharpen=sharpen, hdr_look=hdr_look,
                 music_volume_db=music_volume_db,
+                music_target_lufs=music_target_lufs,
+                music_style=music_style,
+                jamendo_client_id=jamendo_client_id,
                 captions_ass=captions_ass, fonts_dir=fonts_dir,
                 zoom_pan=True,
             )
@@ -651,7 +722,8 @@ def edit_video_multiclip(
     full_filter = f"{xfade_filter};{final_video_filter}"
 
     # 5. Audio: VO + optional music + transition swooshes — all loudness-normalised
-    music = _pick_music(niche)
+    music = _pick_music(niche, music_style=music_style,
+                        jamendo_client_id=jamendo_client_id)
     vo_chain = (
         "highpass=f=80,"
         "acompressor=threshold=-20dB:ratio=3:attack=10:release=200,"
@@ -770,4 +842,7 @@ def edit_video_multiclip(
     except subprocess.TimeoutExpired:
         log.error("Multiclip render timed out")
         return None
-    return out if out.exists() else None
+    if out.exists():
+        _write_music_sidecar(out, music)
+        return out
+    return None

@@ -480,6 +480,8 @@ def produce_one(cfg: dict, secrets: Secrets, tracker: Tracker,
                         sharpen=edit_cfg["filters"]["sharpen"],
                         hdr_look=edit_cfg["filters"]["hdr_look"],
                         music_volume_db=edit_cfg["background_music"]["volume_db"],
+                        music_target_lufs=edit_cfg["background_music"].get(
+                            "target_lufs", -22.0),
                         captions_ass=captions_path,
                         fonts_dir=fonts_dir,
                         fade_duration=fade_duration,
@@ -501,6 +503,8 @@ def produce_one(cfg: dict, secrets: Secrets, tracker: Tracker,
                     sharpen=edit_cfg["filters"]["sharpen"],
                     hdr_look=edit_cfg["filters"]["hdr_look"],
                     music_volume_db=edit_cfg["background_music"]["volume_db"],
+                    music_target_lufs=edit_cfg["background_music"].get(
+                        "target_lufs", -22.0),
                     captions_ass=captions_path,
                     fonts_dir=fonts_dir,
                 )

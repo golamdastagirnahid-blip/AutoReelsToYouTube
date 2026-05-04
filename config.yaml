@@ -241,8 +241,20 @@ editing:
     max_chars_per_chunk: 14
   background_music:
     enabled: true
-    volume_db: -18                # under voiceover
-    source: youtube_audio_library
+    # Target loudness for ALL music tracks — single-pass loudnorm brings
+    # every file (Pixabay, YT Audio Library, Mixkit, FMA, etc.) to the
+    # same level, so a cinematic Pixabay track and a lofi YT Audio
+    # Library track both sit in the mix identically.
+    #   VO   = -14 LUFS (YouTube broadcast standard)
+    #   Music = -22 LUFS (8 dB below VO = pro music-bed spacing)
+    # When VO is speaking, sidechain drops music another ~8-12 dB so it
+    # whispers under the voice. When VO is silent (intro/outro/pauses),
+    # music swells back up to the -22 LUFS bed level.
+    target_lufs: -22
+    # Fallback flat attenuation (only used if loudnorm fails on very
+    # short or corrupted files). Negative dB = quieter.
+    volume_db: -18
+    source: youtube_audio_library  # any folder of mp3/wav works
 
 # --------------------------------------------
 # UPLOAD SCHEDULE

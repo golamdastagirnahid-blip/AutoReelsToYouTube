@@ -303,6 +303,7 @@ def edit_video(
     sharpen: bool = True,
     hdr_look: bool = True,
     music_volume_db: float = -18.0,
+    music_target_lufs: float = -22.0,
     captions_ass: Optional[Path] = None,
     fonts_dir: Optional[Path] = None,
     zoom_pan: bool = True,
@@ -361,10 +362,18 @@ def edit_video(
     # ends the mix the instant the VO ends, leaving the last second of
     # video with NO AUDIO at all (the desync you can hear in the output).
     apad = f"apad=whole_dur={vo_dur:.3f}"
+    # Music is loudness-normalised to `music_target_lufs` (default -22 LUFS,
+    # = 8 dB below the VO bed) BEFORE sidechain ducking. This means every
+    # Pixabay / YT Audio Library / Mixkit track sits in the mix at the same
+    # level regardless of how loud the source file was mastered.
+    music_chain = (
+        f"loudnorm=I={music_target_lufs}:TP=-2:LRA=7,"
+        f"aloop=loop=-1:size=2e+09"
+    )
     if music:
         afilter = (
             f"[1:a]{vo_chain}[vo];"
-            f"[2:a]volume={music_volume_db}dB,aloop=loop=-1:size=2e+09[bgraw];"
+            f"[2:a]{music_chain}[bgraw];"
             # Sidechain compression: music ducks when VO is present
             f"[bgraw][vo]sidechaincompress="
             f"threshold=0.05:ratio=8:attack=10:release=400:makeup=1[bg];"
@@ -517,6 +526,7 @@ def edit_video_multiclip(
     sharpen: bool = True,
     hdr_look: bool = True,
     music_volume_db: float = -18.0,
+    music_target_lufs: float = -22.0,
     captions_ass: Optional[Path] = None,
     fonts_dir: Optional[Path] = None,
     seg_duration: Optional[float] = None,
@@ -677,8 +687,12 @@ def edit_video_multiclip(
     audio_mix_inputs.append("[vo]")
 
     if music:
+        # Music is loudness-normalised to `music_target_lufs` (default -22
+        # LUFS, = 8 dB below the VO bed) BEFORE sidechain ducking. Every
+        # Pixabay / YT Audio Library / Mixkit track ends up at the same
+        # level in the mix regardless of its original mastering.
         afilter_parts.append(
-            f"[{music_idx}:a]volume={music_volume_db}dB,"
+            f"[{music_idx}:a]loudnorm=I={music_target_lufs}:TP=-2:LRA=7,"
             f"aloop=loop=-1:size=2e+09[bgraw];"
             f"[bgraw][vo]sidechaincompress=threshold=0.05:ratio=8:"
             f"attack=10:release=400:makeup=1[bg]"

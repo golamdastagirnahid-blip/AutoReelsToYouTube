@@ -28,22 +28,47 @@ is rendered with VO + transition SFX only (still ships fine).
 | **Free Music Archive** | https://freemusicarchive.org/ | No | Filter by CC0 / CC-BY |
 | **Uppbeat** | https://uppbeat.io/ | Yes (free) | Free tier requires credit in description |
 
-## Recommended levels (already set in `config.yaml`)
+## How the volume is controlled (you don't need to tune each track)
+
+The editor uses **loudness normalization + sidechain ducking**, the same
+technique Netflix, Spotify, and pro YouTube channels use. You can drop in
+ANY Pixabay / YT-Audio-Library / Mixkit track — no matter how loud or quiet
+it was mastered — and it will sit perfectly in the mix.
 
 ```yaml
 editing:
   background_music:
-    volume_db: -18           # under voiceover
+    enabled: true
+    target_lufs: -22         # music bed target (= 8 dB below VO)
+    volume_db: -18           # legacy fallback
   transition_sfx:
     enabled: true
     volume_db: -8            # punchy whoosh on each crossfade
 ```
 
-These match what professional faceless YouTubers use:
-- **VO** at 0 dB (loudnorm to -14 LUFS, YouTube broadcast standard)
-- **Music** at -18 dB, sidechain-ducked when VO speaks (auto-handled)
-- **SFX** at -8 dB (so transitions punch through without being painful)
-- **Final master** loudnorm-ed to -14 LUFS, true peak -1.5 dBTP
+### Pipeline (fully automatic)
+
+1. **VO** → loudnorm to **-14 LUFS** (YouTube broadcast standard)
+2. **Music** → loudnorm to **-22 LUFS** (8 dB below VO, the pro music-bed
+   spacing). A loud cinematic track and a quiet lo-fi track now sound
+   *identical* in the mix.
+3. **Sidechain ducking** → the instant VO is detected, the music is
+   automatically compressed by ~8-12 dB (effective level ~-30 LUFS
+   during speech). When VO pauses or finishes, the music swells back up
+   to the -22 LUFS bed over 400 ms — that's the "professional radio feel".
+4. **Transition SFX** → fixed **-8 dB** per whoosh, loud enough to punch
+   through the mix for each crossfade.
+5. **Final master** → everything is re-limited by the AAC encoder to
+   **true peak -1.5 dBTP**, below YouTube's clipping threshold.
+
+### If the music feels too loud or too quiet
+
+Edit `target_lufs` in `config.yaml`:
+- `-20` → **louder** music (more ambience, rock/edm niches)
+- `-22` → **default** (balanced, recommended)
+- `-25` → **quieter** music (documentary, meditation, whisper ASMR)
+
+No need to re-master tracks or boost/cut in a DAW. The editor handles it.
 
 ## Suggested first-day playlist (pick 2-3 per niche)
 

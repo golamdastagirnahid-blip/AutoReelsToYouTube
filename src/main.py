@@ -17,7 +17,7 @@ import json
 import logging
 import random
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -52,6 +52,15 @@ CONFIG_PATH = _PROJECT_ROOT / "config.yaml"
 # ============================================================
 # Helpers
 # ============================================================
+
+def _utc_now() -> datetime:
+    """Naive UTC `datetime` (matches what SQLite stores).
+
+    Replaces deprecated `datetime.utcnow()` while preserving the existing
+    naive-datetime contract used throughout the tracker.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 
 def load_config() -> dict:
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -507,7 +516,7 @@ def produce_one(cfg: dict, secrets: Secrets, tracker: Tracker,
 
 def schedule_due(cfg: dict, tracker: Tracker) -> None:
     """If no slots are scheduled today, generate them for any 'edited' videos."""
-    today = datetime.utcnow()
+    today = _utc_now()
     edited = tracker.by_status("edited", limit=cfg["upload"]["videos_per_day"])
     if not edited:
         return
@@ -532,7 +541,7 @@ def upload_due(cfg: dict, secrets: Secrets, tracker: Tracker) -> int:
         return 0
 
     posted = 0
-    due = tracker.due_uploads(datetime.utcnow())
+    due = tracker.due_uploads(_utc_now())
     for row in due:
         vid = int(row["id"])
         edited_path = row["edited_path"]

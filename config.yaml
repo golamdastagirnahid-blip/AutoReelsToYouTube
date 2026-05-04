@@ -272,5 +272,5 @@ upload:
 # --------------------------------------------
 safety:
   duplicate_check: true           # hash videos to prevent reposts
-  dry_run: true                   # SET TO false ONLY AFTER TESTING
+  dry_run: false                  # LIVE — videos will be uploaded to YouTube
   max_retries: 3

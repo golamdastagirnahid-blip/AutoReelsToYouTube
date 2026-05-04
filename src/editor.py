@@ -314,10 +314,13 @@ def edit_video(
 
     # Probe the voiceover duration so we can force the final video to match
     # exactly — preventing the audio from being clipped if the source video
-    # is shorter than the VO. Add a 0.5s tail so loudnorm's timing drift
-    # never clips the last syllable.
+    # is shorter than the VO. Add a 1.0s tail so the video holds on the
+    # last frame for a full second of natural silence after the script
+    # finishes. Looks far more professional than a hard cut, and absorbs
+    # loudnorm's 2-pass timing drift so the last syllable is never clipped.
     from src.voiceover import audio_duration
-    vo_dur = (audio_duration(voiceover_audio) or 30.0) + 0.5
+    raw_vo_dur = audio_duration(voiceover_audio) or 30.0
+    vo_dur = raw_vo_dur + 1.0
 
     target_w, target_h = target_resolution
     vf = _video_filter_chain(saturation, sharpen, hdr_look, target_w, target_h,
@@ -353,6 +356,11 @@ def edit_video(
         "acompressor=threshold=-20dB:ratio=3:attack=10:release=200,"
         "loudnorm=I=-14:TP=-1.5:LRA=11"  # YouTube broadcast standard
     )
+    # apad pads the audio with silence so the audio stream is exactly
+    # `vo_dur` long (= VO + 1.0s). Without this, amix's `duration=first`
+    # ends the mix the instant the VO ends, leaving the last second of
+    # video with NO AUDIO at all (the desync you can hear in the output).
+    apad = f"apad=whole_dur={vo_dur:.3f}"
     if music:
         afilter = (
             f"[1:a]{vo_chain}[vo];"
@@ -361,7 +369,7 @@ def edit_video(
             f"[bgraw][vo]sidechaincompress="
             f"threshold=0.05:ratio=8:attack=10:release=400:makeup=1[bg];"
             f"[vo][bg]amix=inputs=2:duration=first:dropout_transition=2:"
-            f"normalize=0[a]"
+            f"normalize=0,{apad}[a]"
         )
         cmd += [
             "-filter_complex", afilter,
@@ -369,7 +377,7 @@ def edit_video(
         ]
     else:
         cmd += [
-            "-filter_complex", f"[1:a]{vo_chain}[a]",
+            "-filter_complex", f"[1:a]{vo_chain},{apad}[a]",
             "-map", "0:v", "-map", "[a]",
         ]
 
@@ -681,15 +689,22 @@ def edit_video_multiclip(
         afilter_parts.append(sfx_filter)
         audio_mix_inputs.append(sfx_label)
 
+    # apad pads the audio with silence so the final audio stream is exactly
+    # `total_dur` long. Without this, amix's `duration=first` ends the mix
+    # the instant the VO ends, leaving the last second of video with NO
+    # AUDIO at all — the perceived desync between video and audio in the
+    # final render. We always apply this so video and audio end together.
+    apad = f"apad=whole_dur={total_dur:.3f}"
     if len(audio_mix_inputs) > 1:
         afilter_parts.append(
             "".join(audio_mix_inputs)
             + f"amix=inputs={len(audio_mix_inputs)}:"
-            + f"duration=first:dropout_transition=0:normalize=0[a]"
+            + f"duration=first:dropout_transition=0:normalize=0,"
+            + f"{apad}[a]"
         )
     else:
-        # Just VO — rename label
-        afilter_parts[-1] = f"[{vo_idx}:a]{vo_chain}[a]"
+        # Just VO — rename label and pad to total_dur
+        afilter_parts[-1] = f"[{vo_idx}:a]{vo_chain},{apad}[a]"
 
     afilter = ";".join(afilter_parts)
     full_filter = f"{full_filter};{afilter}"

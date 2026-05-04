@@ -392,11 +392,12 @@ def produce_one(cfg: dict, secrets: Secrets, tracker: Tracker,
             tracker.update(vid, status="voiced", voiceover_path=str(vo))
 
             # Actual VO duration drives video length for tight A/V sync.
-            # Add a 0.5s tail buffer: loudnorm's 2-pass normalisation can
-            # shift the encoded duration by ~50-100ms, which would otherwise
-            # clip the final syllable at the very end. The buffer becomes
-            # natural breath-room silence in the final video.
-            vo_duration = (audio_duration(vo) or duration) + 0.5
+            # Add a 1.0s tail buffer: the video holds the last frame for one
+            # second after the voiceover ends, giving the viewer a clean
+            # breath of natural silence to land the final word — far more
+            # professional than an abrupt cut. Also absorbs loudnorm's 2-pass
+            # timing drift (~50-100ms) so the last syllable is never clipped.
+            vo_duration = (audio_duration(vo) or duration) + 1.0
 
             # 5. Captions
             edit_cfg = cfg["editing"]

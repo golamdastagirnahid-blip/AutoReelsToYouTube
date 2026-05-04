@@ -16,29 +16,121 @@ project:
 # --------------------------------------------
 niches:
   - name: motivation
-    keywords: [motivation, mindset, success, discipline, inspiration]
+    # Visual keywords → used for Pexels/Pixabay (stock video search).
+    keywords:
+      - sunrise mountain
+      - city skyline aerial
+      - runner determination
+      - person silhouette sunset
+      - climbing peak
+      - workout intense
+      - waves ocean storm
+      - athlete training
+      - lighthouse storm
+      - mountain hiking
+    # Topical hashtags → used for TikTok hashtag pages.
+    tiktok_keywords:
+      - motivation
+      - mindset
+      - success
+      - discipline
+      - inspiration
+      - grind
+      - hustle
     tone: powerful, inspiring, urgent
     music_style: epic, cinematic, uplifting
+    # Curated public Instagram profiles. Empty = skip Instagram.
+    # NOTE: requires an "aged" Instagram account; new accounts get blocked.
+    creator_profiles: []
 
   - name: psychology_facts
-    keywords: [psychology, human behavior, mind facts, brain hacks]
+    keywords:
+      - human brain
+      - eye closeup macro
+      - thinking person silhouette
+      - chess game closeup
+      - meditation mindfulness
+      - neon abstract patterns
+      - candle flame slow motion
+      - water drops macro
+      - sleeping person night
+    tiktok_keywords:
+      - psychologyfacts
+      - psychology
+      - mindfacts
+      - braintricks
+      - humanbehavior
+      - didyouknow
     tone: curious, intriguing, factual
     music_style: mysterious, ambient
+    creator_profiles: []
 
   - name: tech_facts
-    keywords: [tech facts, ai, gadgets, future tech, science]
+    keywords:
+      - server room data center
+      - circuit board macro
+      - hologram futuristic ui
+      - smartphone closeup
+      - robot arm
+      - neural network visualization
+      - city night neon
+      - keyboard typing close
+      - drone flight aerial
+      - cyberpunk lights
+    tiktok_keywords:
+      - techfacts
+      - ai
+      - technology
+      - futuretech
+      - gadgets
+      - techtips
+      - techtok
     tone: exciting, futuristic, informative
     music_style: electronic, tech
+    creator_profiles: []
 
   - name: life_hacks
-    keywords: [life hack, tips and tricks, productivity, diy]
+    keywords:
+      - kitchen cooking hands
+      - home organization
+      - desk setup productivity
+      - cleaning tips
+      - tools workshop
+      - notebook writing planning
+      - coffee morning routine
+      - phone charging
+    tiktok_keywords:
+      - lifehack
+      - lifehacks
+      - tipsandtricks
+      - productivity
+      - dailytips
+      - householdtips
     tone: friendly, helpful, clear
     music_style: upbeat, positive
+    creator_profiles: []
 
   - name: fitness
-    keywords: [fitness, workout, health tips, gym]
+    keywords:
+      - gym workout intense
+      - running outdoor training
+      - barbell deadlift
+      - boxing training closeup
+      - yoga studio
+      - athlete sweat slow motion
+      - calisthenics park
+      - swimming pool athlete
+      - hiit workout
+    tiktok_keywords:
+      - fitness
+      - gym
+      - workout
+      - fitnesstips
+      - gymmotivation
+      - fittok
     tone: energetic, motivating
     music_style: high-energy, rock, edm
+    creator_profiles: []
 
 # --------------------------------------------
 # SOURCES
@@ -50,10 +142,14 @@ sources:
     min_views: 100000
     min_like_ratio: 0.03          # likes / views
     max_age_days: 30
+  tiktok:
+    enabled: true                 # public hashtag pages, no login required
+    max_results: 8
+    min_views: 50000
   copyright_free:
     enabled: true
     providers: [pexels, pixabay]  # both have free APIs
-    per_run_quota: 3              # how many CC videos per daily batch
+    per_run_quota: 8              # candidates fetched per provider per run
 
 # --------------------------------------------
 # DISCOVERY FILTERS
@@ -85,6 +181,10 @@ voiceover:
   similarity_boost: 0.75
   style: 0.4
   speaker_boost: true
+  # Order in which TTS backends are tried. Edge first = fast + reliable.
+  # Failing backends are auto-skipped for 24h after 3 consecutive failures.
+  # Override to ["edge"] to disable all proxy backends entirely.
+  backend_order: [edge, minimax, elevenlabs]
 
 # --------------------------------------------
 # SCRIPT
@@ -100,6 +200,17 @@ script:
 editing:
   resolution: 1080x1920           # vertical for Shorts
   fps: 30
+  multiclip:
+    enabled: true                 # stitch 2-8 clips with crossfades (pro look)
+    target_clips: 5               # how many clips to use in the final video
+    fade_duration_sec: 0.4        # crossfade length between clips
+    min_clips_for_multi: 2        # fewer than this → single-clip mode
+  transition_sfx:
+    enabled: true                 # whoosh/swoosh sound on each crossfade
+    volume_db: -8                 # SFX level (sits on top of music + VO)
+                                  # -8 = punchy / pro YouTuber feel
+                                  # -14 = subtle / cinematic
+                                  # -20 = barely there
   filters:
     saturation: 1.25
     sharpen: true
@@ -113,6 +224,21 @@ editing:
     enabled: true
     font_size: 72
     position: center-top
+  captions:
+    enabled: true
+    whisper_model: tiny.en          # tiny.en | base.en | small.en
+    language: en                    # 'auto' for auto-detect
+    font_name: Impact               # drop a TTF in data/fonts/ to use custom
+    font_size: 96
+    primary_color: "#FFFFFF"        # word color
+    outline_color: "#000000"        # thick black outline
+    highlight_color: "#FFEB3B"      # reserved for active-word highlight
+    outline_px: 6
+    margin_v: 520                   # vertical position from bottom (1080x1920)
+    pop_animation: true             # scale-in pop effect per chunk
+    uppercase: true                 # ALL CAPS like viral shorts
+    max_words_per_chunk: 2          # 1-2 = TikTok/Submagic style
+    max_chars_per_chunk: 14
   background_music:
     enabled: true
     volume_db: -18                # under voiceover

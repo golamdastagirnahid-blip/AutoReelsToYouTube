@@ -12,6 +12,8 @@ token.json
 token.pickle
 youtube_token.json
 instagram_session.json
+instagram_session.bin
+data/instagram_session.*
 secrets/
 
 # ============================================

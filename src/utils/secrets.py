@@ -47,6 +47,7 @@ class Secrets:
     youtube_refresh_token: Optional[str]
     pexels_api_key: Optional[str]
     pixabay_api_key: Optional[str]
+    unsplash_access_key: Optional[str]
     instagram_username: Optional[str]
     instagram_password: Optional[str]
     owner_contact_email: str
@@ -64,6 +65,7 @@ class Secrets:
             youtube_refresh_token=_get("YOUTUBE_REFRESH_TOKEN", required=False),
             pexels_api_key=_get("PEXELS_API_KEY", required=False),
             pixabay_api_key=_get("PIXABAY_API_KEY", required=False),
+            unsplash_access_key=_get("UNSPLASH_ACCESS_KEY", required=False),
             instagram_username=_get("INSTAGRAM_USERNAME", required=False),
             instagram_password=_get("INSTAGRAM_PASSWORD", required=False),
             owner_contact_email=_get("OWNER_CONTACT_EMAIL", default="contact@example.com"),
@@ -81,6 +83,7 @@ class Secrets:
             f"  YouTube TOK  : {_mask(self.youtube_refresh_token)}\n"
             f"  Pexels       : {_mask(self.pexels_api_key)}\n"
             f"  Pixabay      : {_mask(self.pixabay_api_key)}\n"
+            f"  Unsplash     : {_mask(self.unsplash_access_key)}\n"
             f"  Owner email  : {self.owner_contact_email}"
         )
 

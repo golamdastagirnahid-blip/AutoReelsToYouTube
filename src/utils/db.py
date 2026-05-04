@@ -60,6 +60,12 @@ CREATE TABLE IF NOT EXISTS upload_schedule (
     scheduled_for   TIMESTAMP NOT NULL,
     posted          INTEGER DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS kv_state (
+    key             TEXT PRIMARY KEY,
+    value           TEXT,
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 
@@ -195,4 +201,22 @@ class Tracker:
             c.execute(
                 "UPDATE upload_schedule SET posted = 1 WHERE id = ?",
                 (schedule_id,),
+            )
+
+    # ---------------- key-value state ----------------
+
+    def kv_get(self, key: str) -> Optional[str]:
+        with self.connect() as c:
+            row = c.execute(
+                "SELECT value FROM kv_state WHERE key = ?", (key,)
+            ).fetchone()
+            return row["value"] if row else None
+
+    def kv_set(self, key: str, value: str) -> None:
+        with self.connect() as c:
+            c.execute(
+                "INSERT INTO kv_state (key, value, updated_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
+                "updated_at=excluded.updated_at",
+                (key, value, datetime.utcnow().isoformat()),
             )

@@ -37,6 +37,12 @@ numpy>=1.26.4
 opencv-python-headless>=4.10.0.84
 
 # ============================================
+# Word-level transcription for karaoke-style captions
+# (uses small CPU model — ~40 MB, runs in seconds)
+# ============================================
+faster-whisper>=1.0.3
+
+# ============================================
 # YouTube upload
 # ============================================
 google-api-python-client>=2.149.0

@@ -21,24 +21,79 @@ log = logging.getLogger(__name__)
 _NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 _DEFAULT_MODEL = "meta/llama-3.1-70b-instruct"
 
-_SYSTEM = """You write scripts for faceless YouTube Shorts.
+_SYSTEM = """You are a world-class YouTube Shorts scriptwriter. Your scripts have
+generated hundreds of millions of views and earn YouTube Partner Program revenue.
+You write for FACELESS channels — voiceover only, no host on camera.
 
-Your output MUST be valid JSON with this exact shape:
+OUTPUT — return ONLY valid JSON (no markdown, no preamble):
 {
-  "title": "60-char SEO-friendly title with curiosity hook",
-  "script": "voiceover text, no stage directions, no emojis, plain spoken English",
-  "description": "2-3 sentence YouTube description body",
-  "tags": ["tag1", "tag2", ...],   // 8-15 tags, lowercase, no #
-  "hashtags": ["#shorts", "#niche", ...]  // 4-6 hashtags
+  "hook_overlay": "2-4 WORDS, max 14 chars, ALL CAPS, shown as on-screen text in first 3s",
+  "title": "YouTube title (50-95 chars), curiosity-driven, includes a power word",
+  "script": "voiceover text — plain spoken English, no stage directions, no emojis",
+  "description": "2-4 sentence body. First sentence MUST repeat the hook to win the algorithm preview.",
+  "tags": ["8-15 SEO tags, lowercase, no # symbol"],
+  "hashtags": ["#shorts", "#nichetag", "..."]   // exactly 5 hashtags including #shorts
 }
 
-Hard rules:
-- Script must hook in the first 3 seconds (a question, a shocking fact, or a contrarian claim)
-- Tone is informative, professional, engaging — never salesy, never clickbait
-- Word count = roughly duration_sec * 2.5 (~150 wpm)
-- No promotional content, no calls to subscribe inside the script
-- No mentions of the original creator inside the script (credit goes in description only)
-- Do NOT make up specific statistics that weren't in the analysis
+============================================================
+THE THREE-ACT VIRAL FORMULA — follow this structure ALWAYS
+============================================================
+
+ACT 1 — HOOK (first 3 seconds, ~7-10 words)
+   Pick ONE of these proven patterns:
+   • Curiosity gap:    "Here's why [common belief] is completely wrong..."
+   • Shock fact:       "94% of people don't know that..."  (only if backed by analysis)
+   • Pattern break:    "Stop doing [common habit]. Do this instead."
+   • Direct question:  "What if I told you [outcome] takes only [time]?"
+   • Contrarian:       "Everyone says [X]. They're wrong."
+   • Specific number:  "These 3 [things] will change your [outcome]."
+   • POV/scenario:     "Imagine you [situation]. Here's what happens..."
+   The hook MUST imply a payoff later — never give the answer in the hook.
+
+ACT 2 — BODY (60-75% of duration, the meat)
+   • Pay off the hook with 2-3 specific, concrete points
+   • Pattern interrupt every 5-7 words (new clause, new angle, new specific)
+   • Use SECOND PERSON ("you", "your") in every sentence
+   • Active verbs only — never passive voice
+   • Specific over generic: "300 calories" beats "some calories"
+   • Sentences max 12 words. Two short > one long.
+
+ACT 3 — LOOPBACK CTA (last 2-3 seconds, ~5-8 words)
+   Critical for retention + replays (algorithm boost):
+   • End with a sentence that re-frames or escalates the hook
+   • OR a question that makes them want to watch again
+   • OR a "save this" / "try this tomorrow" instruction
+   • NEVER say "subscribe", "like", or mention the channel
+
+============================================================
+HARD CONSTRAINTS
+============================================================
+
+1. WORD COUNT: aim for `target_words` ± 10%. NEVER under 80% of target.
+2. HOOK_OVERLAY: max 4 words, max 14 characters total, no punctuation.
+   GOOD: "STOP DOING THIS", "94% FAIL THIS", "1 HABIT"
+   BAD:  "The Three Things You Need To Know" (too long, will be cut off)
+3. NO em-dashes, no semicolons, no parentheses in the script (TTS can't read them well).
+4. NO "subscribe", "like", "follow", channel name, or self-promo INSIDE the script.
+5. NO original-creator credits inside the script (those go in description only).
+6. NO made-up statistics — if the video analysis doesn't support a number, use ranges
+   ("most people", "many studies") instead.
+7. TITLE: must contain at least one POWER WORD: secret, truth, hidden, proven, science,
+   real, why, how, never, always, instantly, 1-minute, ultimate, mistake.
+8. Tone matches the niche (provided below) but always cinematic + confident.
+9. NO emojis ANYWHERE. NO hashtags inside the script or title.
+10. Output MUST be parseable JSON — no trailing commas, no comments.
+
+============================================================
+SELF-CHECK before responding
+============================================================
+☐ Does the hook (first sentence of script) create a curiosity gap?
+☐ Is hook_overlay ≤ 14 chars and ≤ 4 words?
+☐ Does the script have a payoff for the hook in the body?
+☐ Does the last sentence loop back / give a save-worthy takeaway?
+☐ Word count within ±10% of target?
+☐ Title has a power word and is under 95 chars?
+☐ No emojis, no #, no "subscribe"?
 """
 
 
@@ -52,6 +107,37 @@ def _parse_json(text: str) -> dict:
     return json.loads(m.group(0))
 
 
+_TTS_UNFRIENDLY = re.compile(r"[—–;()\[\]{}*_`|]")
+_MULTI_PUNCT = re.compile(r"([.!?])\1{2,}")
+_MULTI_SPACE = re.compile(r"\s+")
+
+
+def _clean_for_tts(text: str) -> str:
+    """Strip TTS-unfriendly punctuation and collapse whitespace."""
+    if not text:
+        return ""
+    text = _TTS_UNFRIENDLY.sub(" ", text)
+    text = _MULTI_PUNCT.sub(r"\1", text)
+    text = _MULTI_SPACE.sub(" ", text).strip()
+    return text
+
+
+def _shorten_hook(hook: str, max_words: int = 4, max_chars: int = 14) -> str:
+    """Force the on-screen hook overlay into safe-zone text:
+    - ALL CAPS
+    - <= max_words words
+    - <= max_chars total
+    Falls back to the first N words of the script if needed.
+    """
+    if not hook:
+        return ""
+    h = re.sub(r"[^\w\s]", "", hook).strip().upper()
+    words = h.split()[:max_words]
+    while words and sum(len(w) for w in words) + len(words) - 1 > max_chars:
+        words.pop()
+    return " ".join(words) if words else ""
+
+
 def write_script(
     analysis: dict,
     duration_sec: float,
@@ -61,15 +147,27 @@ def write_script(
     *,
     model: str = _DEFAULT_MODEL,
     style: str = "informative, professional, engaging",
+    min_duration_sec: float = 22.0,
 ) -> dict:
-    target_words = max(15, int(duration_sec * 2.5))
+    """Generate a viral Shorts script with a strict 3-act structure.
+
+    Args:
+        min_duration_sec: enforce a minimum target duration (default 22s).
+            YouTube Shorts under 20s have notably worse retention/CPM.
+            We bump short videos up to give the script room for hook + body + payoff.
+    """
+    # Force a minimum target so we don't end up with a 7-second video
+    effective_duration = max(min_duration_sec, duration_sec)
+    target_words = max(60, int(effective_duration * 2.5))
     user_prompt = (
         f"Niche: {niche}\n"
         f"Desired tone: {tone}\n"
         f"Style guide: {style}\n"
-        f"Duration: {duration_sec:.1f}s (target ~{target_words} words)\n\n"
-        f"Video analysis:\n{json.dumps(analysis, ensure_ascii=False)[:3000]}\n\n"
-        f"Write the JSON output now."
+        f"Target duration: {effective_duration:.1f}s "
+        f"(WRITE EXACTLY {target_words} words ± 10%)\n\n"
+        f"Video analysis (use as INSPIRATION for visuals/topic, do not copy):\n"
+        f"{json.dumps(analysis, ensure_ascii=False)[:3000]}\n\n"
+        f"Now write the JSON output. Self-check before submitting."
     )
     client = OpenAI(api_key=nvidia_api_key, base_url=_NVIDIA_BASE_URL)
     resp = client.chat.completions.create(
@@ -78,18 +176,134 @@ def write_script(
             {"role": "system", "content": _SYSTEM},
             {"role": "user", "content": user_prompt},
         ],
-        temperature=0.7,
-        max_tokens=900,
+        temperature=0.85,           # higher = more creative/varied hooks
+        top_p=0.95,
+        max_tokens=1100,
     )
     out = _parse_json(resp.choices[0].message.content)
 
-    # Validate shape with sane defaults
-    out.setdefault("title", f"Amazing {niche} short")
-    out.setdefault("script", "")
-    out.setdefault("description", "")
-    out.setdefault("tags", [])
-    out.setdefault("hashtags", ["#shorts", f"#{niche.replace('_', '')}"])
+    # ---- Validate / sanitize each field ----
+    out["script"] = _clean_for_tts(str(out.get("script", "")))
+    out["title"] = _clean_for_tts(str(out.get("title", f"Amazing {niche} short")))[:95]
+    out["description"] = _clean_for_tts(str(out.get("description", "")))
 
-    # Trim title to YouTube limit
-    out["title"] = str(out["title"])[:95]
+    # Hook overlay: clamp to safe-zone size; if missing, derive from first words
+    hook = str(out.get("hook_overlay", "")).strip()
+    if not hook and out["script"]:
+        hook = " ".join(out["script"].split()[:4])
+    out["hook_overlay"] = _shorten_hook(hook)
+
+    # Tags & hashtags
+    raw_tags = out.get("tags") or []
+    out["tags"] = [str(t).strip().lstrip("#").lower()
+                   for t in raw_tags if str(t).strip()][:15]
+    raw_hashtags = out.get("hashtags") or []
+    cleaned_hashtags = []
+    for h in raw_hashtags:
+        h = str(h).strip()
+        if not h:
+            continue
+        if not h.startswith("#"):
+            h = "#" + h
+        # remove inner spaces
+        h = "#" + re.sub(r"\s+", "", h.lstrip("#"))
+        cleaned_hashtags.append(h.lower())
+    if "#shorts" not in cleaned_hashtags:
+        cleaned_hashtags.insert(0, "#shorts")
+    niche_tag = f"#{niche.replace('_', '')}"
+    if niche_tag not in cleaned_hashtags:
+        cleaned_hashtags.append(niche_tag)
+    out["hashtags"] = cleaned_hashtags[:5]
+
+    # Word-count guard: log if model under-delivered (helps debug short videos)
+    actual_words = len(out["script"].split())
+    if actual_words < target_words * 0.7:
+        log.warning("Script underweight: got %d words, wanted ~%d. "
+                    "Hook=%r", actual_words, target_words, out["hook_overlay"])
+    else:
+        log.info("Script: %d words (target ~%d), hook=%r",
+                 actual_words, target_words, out["hook_overlay"])
     return out
+
+
+# ============================================================
+# Visual concept extraction (for script-driven B-roll search)
+# ============================================================
+
+_VC_SYSTEM = """You convert a short voiceover script into VISUAL search queries
+for stock-footage and TikTok hashtag search.
+
+Return JSON only, with this exact shape:
+{
+  "concepts": [
+    {"query": "short visual phrase", "alt": ["1-2 word variation", "another angle"]},
+    ...
+  ]
+}
+
+Rules:
+- Generate exactly 5-7 concepts in narrative order (intro → body → outro).
+- Each `query` is 2-5 words, lowercase, focused on a CONCRETE VISUAL
+  (e.g. "athlete sprinting track", NOT abstract like "determination").
+- Each `alt` array has 1-3 alternate phrasings to broaden the search
+  (synonyms, different camera angles, related imagery).
+- No hashtags, no brand names, no person names.
+- Prefer cinematic / dramatic visuals that match a viral Short.
+"""
+
+
+def extract_visual_concepts(
+    script_text: str,
+    niche: str,
+    nvidia_api_key: str,
+    *,
+    model: str = _DEFAULT_MODEL,
+    fallback: Optional[list[str]] = None,
+) -> list[dict]:
+    """Use the LLM to derive 5-7 concrete visual search queries from `script_text`.
+
+    Returns a list of dicts: [{"query": str, "alt": [str, ...]}, ...].
+    On failure, returns a single concept built from `fallback` keywords.
+    """
+    if not script_text.strip():
+        return [{"query": niche, "alt": fallback or []}]
+
+    user_prompt = (
+        f"Niche: {niche}\n\n"
+        f"Voiceover script:\n\"\"\"\n{script_text.strip()[:1500]}\n\"\"\"\n\n"
+        f"Output the JSON now."
+    )
+    try:
+        client = OpenAI(api_key=nvidia_api_key, base_url=_NVIDIA_BASE_URL)
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": _VC_SYSTEM},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.6,
+            max_tokens=500,
+        )
+        data = _parse_json(resp.choices[0].message.content)
+        concepts = data.get("concepts") or []
+    except Exception as e:
+        log.warning("extract_visual_concepts failed: %s", e)
+        concepts = []
+
+    cleaned: list[dict] = []
+    for c in concepts:
+        if not isinstance(c, dict):
+            continue
+        q = (c.get("query") or "").strip().lower()
+        if not q:
+            continue
+        alts = [str(a).strip().lower() for a in (c.get("alt") or [])
+                if a and str(a).strip()]
+        cleaned.append({"query": q[:60], "alt": alts[:3]})
+    if cleaned:
+        return cleaned[:7]
+
+    # Fallback: split keywords list into single-concept entries
+    if fallback:
+        return [{"query": k, "alt": []} for k in fallback[:5]]
+    return [{"query": niche, "alt": []}]

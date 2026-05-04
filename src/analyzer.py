@@ -25,8 +25,18 @@ from openai import OpenAI
 log = logging.getLogger(__name__)
 
 _NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
-_VISION_MODEL = "meta/llama-3.2-90b-vision-instruct"
+# Vision-capable models on NVIDIA NIM (tried in order until one works).
+# Removed deprecated phi-3.5 and nvidia/vila (410 Gone).
+_VISION_MODEL_CANDIDATES = [
+    "meta/llama-3.2-11b-vision-instruct",
+    "meta/llama-3.2-90b-vision-instruct",
+    "google/gemma-3-27b-it",
+    "qwen/qwen2.5-vl-32b-instruct",
+]
+_VISION_MODEL = _VISION_MODEL_CANDIDATES[0]
 _TEXT_FALLBACK_MODEL = "meta/llama-3.1-70b-instruct"
+# NVIDIA's vision endpoint allows max 1 image per request.
+_MAX_FRAMES_PER_REQUEST = 1
 
 _SYSTEM = (
     "You are a video analyst for a faceless YouTube Shorts channel. "
@@ -110,37 +120,54 @@ def analyze_video(
 ) -> dict:
     """Returns the analysis dict (and adds duration_sec)."""
     duration = probe_duration(video_path)
-    frames = extract_keyframes(video_path, n=4)
+    # Sample more frames for selection but only send 1 to the API (vision limit)
+    all_frames = extract_keyframes(video_path, n=4)
+    # Pick the middle frame as the most representative
+    frames = [all_frames[len(all_frames) // 2]] if all_frames else []
+    frames = frames[:_MAX_FRAMES_PER_REQUEST]
 
     client = OpenAI(api_key=nvidia_api_key, base_url=_NVIDIA_BASE_URL)
 
     # Try vision model first if we have frames
     if frames:
-        try:
-            content = [
-                {"type": "text",
-                 "text": f"Caption: {caption or '(none)'}\nDuration: {duration:.1f}s\n"
-                         f"Analyze the {len(frames)} keyframes and respond with strict JSON."},
-            ]
-            for fp in frames:
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{_b64(fp)}"},
-                })
-            resp = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": _SYSTEM},
-                    {"role": "user", "content": content},
-                ],
-                temperature=0.4,
-                max_tokens=800,
-            )
-            data = _parse_json(resp.choices[0].message.content)
-            data["duration_sec"] = duration
-            return data
-        except Exception as e:
-            log.warning("Vision analysis failed (%s); falling back to text-only", e)
+        content = [
+            {"type": "text",
+             "text": f"Caption: {caption or '(none)'}\nDuration: {duration:.1f}s\n"
+                     f"Analyze this representative frame and respond with strict JSON."},
+        ]
+        for fp in frames:
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{_b64(fp)}"},
+            })
+
+        # Try the configured model, then each candidate vision model
+        tried = []
+        for candidate in [model] + [m for m in _VISION_MODEL_CANDIDATES if m != model]:
+            if candidate in tried:
+                continue
+            tried.append(candidate)
+            try:
+                resp = client.chat.completions.create(
+                    model=candidate,
+                    messages=[
+                        {"role": "system", "content": _SYSTEM},
+                        {"role": "user", "content": content},
+                    ],
+                    temperature=0.4,
+                    max_tokens=800,
+                )
+                data = _parse_json(resp.choices[0].message.content)
+                data["duration_sec"] = duration
+                log.info("Vision analysis OK with model=%s", candidate)
+                return data
+            except Exception as e:
+                msg = str(e)[:120]
+                if "404" in msg or "not found" in msg.lower() or "unknown model" in msg.lower():
+                    log.debug("Vision model %s unavailable, trying next", candidate)
+                    continue
+                log.warning("Vision analysis failed on %s (%s); trying next", candidate, msg)
+        log.warning("All vision models failed; falling back to text-only")
 
     # Text-only fallback
     resp = client.chat.completions.create(

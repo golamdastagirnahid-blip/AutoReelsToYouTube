@@ -8,7 +8,7 @@ Two render modes:
 Common stages (both modes):
   1. Trim / scale / crop to vertical 1080x1920 (Lanczos)
   2. Cinematic colour grade: warm tone, S-curve, vignette, sharpen
-  3. Mute original audio; mix in VO + ducked music with sidechain compression
+  3. Mute original audio; audio track = voiceover + transition SFX (no music)
   4. Bold animated hook overlay during the first 3 seconds
   5. Karaoke captions burned in via libass
   6. CRF 18 / preset slow H.264 + 192 kbps AAC at 48 kHz
@@ -27,11 +27,9 @@ log = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PROCESSED_DIR = _PROJECT_ROOT / "data" / "processed"
-MUSIC_DIR = _PROJECT_ROOT / "data" / "music"
 SEGMENTS_DIR = PROCESSED_DIR / "segments"
 PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 SEGMENTS_DIR.mkdir(parents=True, exist_ok=True)
-MUSIC_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ============================================================
@@ -155,92 +153,6 @@ def _hook_drawtext(hook_text: str, duration: float = 3.0,
     )
 
 
-_MUSIC_NUDGE_SHOWN = False
-
-
-def _pick_music(
-    niche: str,
-    *,
-    music_style: str = "",
-    jamendo_client_id: Optional[str] = None,
-) -> Optional[Path]:
-    """Pick a random track for the niche, auto-fetching from Jamendo if set.
-
-    Lookup order:
-        1. If `jamendo_client_id` is provided and `data/music/<niche>/` has
-           fewer than 3 tracks, pull up to 5 CC-licensed tracks tagged by
-           `music_style` from Jamendo and cache them on disk (one-time per
-           niche, idempotent on subsequent runs).
-        2. Pick a random .mp3/.wav from `data/music/<niche>/`.
-        3. Fall back to `data/music/` (niche-agnostic pool).
-        4. Return None — render with VO + SFX only.
-
-    The picked track keeps its attribution sidecar (written by the Jamendo
-    fetcher as `<track>.mp3.json`). Callers use `_music_attribution(path)`
-    to read it and append to the YouTube description.
-    """
-    global _MUSIC_NUDGE_SHOWN
-    sub = MUSIC_DIR / niche
-    sub.mkdir(parents=True, exist_ok=True)
-
-    # 1. Jamendo auto-fetch (one-time per niche, no-op if cache is warm)
-    if jamendo_client_id and music_style:
-        try:
-            from src.music_fetcher import ensure_cache
-            ensure_cache(
-                niche=niche,
-                music_style=music_style,
-                client_id=jamendo_client_id,
-                dest_root=MUSIC_DIR,
-                min_tracks=3,
-                fetch_count=5,
-            )
-        except Exception as e:
-            log.warning("Jamendo auto-fetch failed: %s", e)
-
-    candidates: list[Path] = []
-    if sub.exists():
-        candidates += list(sub.glob("*.mp3")) + list(sub.glob("*.wav"))
-    if not candidates:
-        candidates += list(MUSIC_DIR.glob("*.mp3")) + list(MUSIC_DIR.glob("*.wav"))
-    if not candidates:
-        if not _MUSIC_NUDGE_SHOWN:
-            log.info("No background music in data/music/. See "
-                     "data/music/README.md for free royalty-free sources "
-                     "(YouTube Audio Library, Pixabay, Mixkit, Jamendo). "
-                     "Rendering with voiceover + SFX only.")
-            _MUSIC_NUDGE_SHOWN = True
-        return None
-    chosen = random.choice(candidates)
-    log.info("Music: %s", chosen.relative_to(MUSIC_DIR.parent))
-    return chosen
-
-
-def _write_music_sidecar(output_video: Path, music_path: Optional[Path]) -> None:
-    """Write `<video>.music.json` next to the rendered mp4 so the uploader
-    can read attribution info and append a credit to the description.
-
-    No-op if the music track has no attribution sidecar (e.g. user-provided
-    track from YouTube Audio Library, which doesn't require credit anyway).
-    """
-    if not music_path:
-        return
-    try:
-        from src.music_fetcher import attribution_for
-        attr = attribution_for(music_path)
-    except Exception:
-        attr = None
-    if not attr:
-        return
-    sidecar = output_video.with_suffix(output_video.suffix + ".music.json")
-    try:
-        import json as _json
-        sidecar.write_text(_json.dumps(attr, indent=2, ensure_ascii=False),
-                           encoding="utf-8")
-    except Exception as e:
-        log.debug("Could not write music sidecar %s: %s", sidecar, e)
-
-
 # ============================================================
 # Procedural transition swooshes (no external SFX files needed)
 # ============================================================
@@ -359,10 +271,6 @@ def edit_video(
     saturation: float = 1.25,
     sharpen: bool = True,
     hdr_look: bool = True,
-    music_volume_db: float = -18.0,
-    music_target_lufs: float = -22.0,
-    music_style: str = "",
-    jamendo_client_id: Optional[str] = None,
     captions_ass: Optional[Path] = None,
     fonts_dir: Optional[Path] = None,
     zoom_pan: bool = True,
@@ -402,53 +310,25 @@ def edit_video(
     # same point and the audio is never truncated.
     vf = f"{vf},tpad=stop_mode=clone:stop_duration=4"
 
-    music = _pick_music(niche, music_style=music_style,
-                        jamendo_client_id=jamendo_client_id)
+    # ----------------------------------------------------------------
+    # Audio: voiceover ONLY (background music removed by user request).
+    # The VO chain cleans up sub-rumble, applies mild compression for
+    # consistent loudness, and normalises to YouTube's -14 LUFS target.
+    # apad ensures the audio stream is exactly vo_dur long (= VO + 1.0s
+    # tail) so the final render never has silent dead air or chopped
+    # last-syllable artefacts.
+    # ----------------------------------------------------------------
     cmd = ["ffmpeg", "-y", "-i", str(source_video), "-i", str(voiceover_audio)]
-    if music:
-        cmd += ["-stream_loop", "-1", "-i", str(music)]
-
-    # Build audio filter graph
-    # VO (input 1) is processed: high-pass to clean rumble, mild compression,
-    # de-essing, then loudness-normalised to YouTube's -14 LUFS target.
-    # Music (input 2) is volume-cut and SIDECHAIN-DUCKED under the VO.
     vo_chain = (
-        "highpass=f=80,"             # remove sub rumble
+        "highpass=f=80,"
         "acompressor=threshold=-20dB:ratio=3:attack=10:release=200,"
-        "loudnorm=I=-14:TP=-1.5:LRA=11"  # YouTube broadcast standard
+        "loudnorm=I=-14:TP=-1.5:LRA=11"
     )
-    # apad pads the audio with silence so the audio stream is exactly
-    # `vo_dur` long (= VO + 1.0s). Without this, amix's `duration=first`
-    # ends the mix the instant the VO ends, leaving the last second of
-    # video with NO AUDIO at all (the desync you can hear in the output).
     apad = f"apad=whole_dur={vo_dur:.3f}"
-    # Music is loudness-normalised to `music_target_lufs` (default -22 LUFS,
-    # = 8 dB below the VO bed) BEFORE sidechain ducking. This means every
-    # Pixabay / YT Audio Library / Mixkit track sits in the mix at the same
-    # level regardless of how loud the source file was mastered.
-    music_chain = (
-        f"loudnorm=I={music_target_lufs}:TP=-2:LRA=7,"
-        f"aloop=loop=-1:size=2e+09"
-    )
-    if music:
-        afilter = (
-            f"[1:a]{vo_chain}[vo];"
-            f"[2:a]{music_chain}[bgraw];"
-            # Sidechain compression: music ducks when VO is present
-            f"[bgraw][vo]sidechaincompress="
-            f"threshold=0.05:ratio=8:attack=10:release=400:makeup=1[bg];"
-            f"[vo][bg]amix=inputs=2:duration=first:dropout_transition=2:"
-            f"normalize=0,{apad}[a]"
-        )
-        cmd += [
-            "-filter_complex", afilter,
-            "-map", "0:v", "-map", "[a]",
-        ]
-    else:
-        cmd += [
-            "-filter_complex", f"[1:a]{vo_chain},{apad}[a]",
-            "-map", "0:v", "-map", "[a]",
-        ]
+    cmd += [
+        "-filter_complex", f"[1:a]{vo_chain},{apad}[a]",
+        "-map", "0:v", "-map", "[a]",
+    ]
 
     cmd += [
         "-vf", vf,
@@ -476,10 +356,10 @@ def edit_video(
     try:
         subprocess.run(cmd, capture_output=True, check=True)
     except subprocess.CalledProcessError as e:
-        log.error("FFmpeg failed:\n%s", e.stderr.decode("utf-8", errors="ignore")[:2000])
+        full_err = e.stderr.decode("utf-8", errors="ignore")
+        log.error("FFmpeg failed (tail):\n%s", full_err[-2000:])
         return None
     if out.exists():
-        _write_music_sidecar(out, music)
         return out
     return None
 
@@ -588,10 +468,6 @@ def edit_video_multiclip(
     saturation: float = 1.25,
     sharpen: bool = True,
     hdr_look: bool = True,
-    music_volume_db: float = -18.0,
-    music_target_lufs: float = -22.0,
-    music_style: str = "",
-    jamendo_client_id: Optional[str] = None,
     captions_ass: Optional[Path] = None,
     fonts_dir: Optional[Path] = None,
     seg_duration: Optional[float] = None,
@@ -607,7 +483,7 @@ def edit_video_multiclip(
       2. Normalize each segment to target resolution, fps, codec
       3. Stitch them together with xfade transitions in filter_complex
       4. Apply colour grade + hook + captions on top
-      5. Mix VO + ducked music; loudnorm to -14 LUFS
+      5. Render audio: VO + transition SFX (no background music)
 
     `target_total_duration` should equal the VO duration (so video and audio
     line up). `seg_duration` defaults to filling that duration evenly.
@@ -626,10 +502,6 @@ def edit_video_multiclip(
             hook_text=hook_text,
             target_resolution=target_resolution,
             saturation=saturation, sharpen=sharpen, hdr_look=hdr_look,
-            music_volume_db=music_volume_db,
-            music_target_lufs=music_target_lufs,
-            music_style=music_style,
-            jamendo_client_id=jamendo_client_id,
             captions_ass=captions_ass, fonts_dir=fonts_dir,
             zoom_pan=True,
         )
@@ -678,10 +550,6 @@ def edit_video_multiclip(
                 video_id=video_id, niche=niche, hook_text=hook_text,
                 target_resolution=target_resolution,
                 saturation=saturation, sharpen=sharpen, hdr_look=hdr_look,
-                music_volume_db=music_volume_db,
-                music_target_lufs=music_target_lufs,
-                music_style=music_style,
-                jamendo_client_id=jamendo_client_id,
                 captions_ass=captions_ass, fonts_dir=fonts_dir,
                 zoom_pan=True,
             )
@@ -721,87 +589,59 @@ def edit_video_multiclip(
     )
     full_filter = f"{xfade_filter};{final_video_filter}"
 
-    # 5. Audio: VO + optional music + transition swooshes — all loudness-normalised
-    music = _pick_music(niche, music_style=music_style,
-                        jamendo_client_id=jamendo_client_id)
+    # ---------------------------------------------------------------
+    # 5. Audio: VO + transition SFX (background music removed entirely)
+    # ---------------------------------------------------------------
+    # The audio graph is now: VO -> processing chain -> [vo_processed]
+    # then optionally amix'd with SFX swooshes. Total length is forced to
+    # `total_dur` via apad so the audio ends EXACTLY when the video ends.
     vo_chain = (
         "highpass=f=80,"
         "acompressor=threshold=-20dB:ratio=3:attack=10:release=200,"
         "loudnorm=I=-14:TP=-1.5:LRA=11"
     )
     vo_idx = n_used                # VO is the (n_used)th input
-    music_idx = n_used + 1 if music else None  # music input slot (if present)
 
     # Compute crossfade timestamps for the SFX mix.
-    # Each xfade i begins at: i*(seg_duration - fade_duration) + ~half-fade
-    # so the swoosh peaks during the visual transition.
     transition_times: list[float] = []
     if sfx_enabled:
         for i in range(1, n_used):
-            # offset = i * (seg - fade); we nudge -50ms so the swoosh PEAKS
-            # at the exact midpoint of the crossfade (more impact)
+            # nudge -50ms so the swoosh PEAKS at the crossfade midpoint
             t = i * (seg_duration - fade_duration) - 0.05
             transition_times.append(max(0.05, t))
 
     total_dur = (target_total_duration
                  or (n_used * seg_duration - (n_used - 1) * fade_duration))
 
-    sfx_start_idx = (music_idx + 1) if music else (vo_idx + 1)
+    sfx_start_idx = vo_idx + 1
     sfx_filter, sfx_files, sfx_label = _build_sfx_audio_chain(
         transition_times, total_dur,
         sfx_volume_db=sfx_volume_db,
         start_input_idx=sfx_start_idx,
     )
 
-    # Build the audio mix
-    audio_mix_inputs = []
-    afilter_parts = [f"[{vo_idx}:a]{vo_chain}[vo]"]
-    audio_mix_inputs.append("[vo]")
-
-    if music:
-        # Music is loudness-normalised to `music_target_lufs` (default -22
-        # LUFS, = 8 dB below the VO bed) BEFORE sidechain ducking. Every
-        # Pixabay / YT Audio Library / Mixkit track ends up at the same
-        # level in the mix regardless of its original mastering.
-        afilter_parts.append(
-            f"[{music_idx}:a]loudnorm=I={music_target_lufs}:TP=-2:LRA=7,"
-            f"aloop=loop=-1:size=2e+09[bgraw];"
-            f"[bgraw][vo]sidechaincompress=threshold=0.05:ratio=8:"
-            f"attack=10:release=400:makeup=1[bg]"
-        )
-        audio_mix_inputs.append("[bg]")
-
-    if sfx_filter:
-        afilter_parts.append(sfx_filter)
-        audio_mix_inputs.append(sfx_label)
-
-    # apad pads the audio with silence so the final audio stream is exactly
-    # `total_dur` long. Without this, amix's `duration=first` ends the mix
-    # the instant the VO ends, leaving the last second of video with NO
-    # AUDIO at all — the perceived desync between video and audio in the
-    # final render. We always apply this so video and audio end together.
+    # Build audio filter graph (VO + optional SFX, no music)
     apad = f"apad=whole_dur={total_dur:.3f}"
-    if len(audio_mix_inputs) > 1:
-        afilter_parts.append(
-            "".join(audio_mix_inputs)
-            + f"amix=inputs={len(audio_mix_inputs)}:"
-            + f"duration=first:dropout_transition=0:normalize=0,"
-            + f"{apad}[a]"
+    if sfx_filter:
+        # VO processed -> [vop]; mix with SFX -> [a]
+        afilter = (
+            f"[{vo_idx}:a]{vo_chain}[vop];"
+            f"{sfx_filter};"
+            f"[vop]{sfx_label}amix=inputs=2:"
+            f"duration=first:dropout_transition=0:normalize=0,"
+            f"{apad}[a]"
         )
     else:
-        # Just VO — rename label and pad to total_dur
-        afilter_parts[-1] = f"[{vo_idx}:a]{vo_chain},{apad}[a]"
+        # VO only — single chain, no labels needed
+        afilter = f"[{vo_idx}:a]{vo_chain},{apad}[a]"
 
-    afilter = ";".join(afilter_parts)
     full_filter = f"{full_filter};{afilter}"
 
-    # Build ffmpeg command
+    # Build ffmpeg command (segments + VO + SFX inputs; NO music input)
     cmd = ["ffmpeg", "-y"]
     for seg in segs:
         cmd += ["-i", str(seg)]
     cmd += ["-i", str(voiceover_audio)]
-    if music:
-        cmd += ["-stream_loop", "-1", "-i", str(music)]
     for sfx in sfx_files:
         cmd += ["-i", str(sfx)]
 
@@ -836,13 +676,14 @@ def edit_video_multiclip(
     try:
         subprocess.run(cmd, capture_output=True, check=True, timeout=600)
     except subprocess.CalledProcessError as e:
-        log.error("Multiclip ffmpeg failed:\n%s",
-                  e.stderr.decode("utf-8", errors="ignore")[:3000])
+        # Log the LAST 3000 chars (where ffmpeg's actual error message lives)
+        # rather than the FIRST 3000 (which is just the verbose banner).
+        full_err = e.stderr.decode("utf-8", errors="ignore")
+        log.error("Multiclip ffmpeg failed (tail):\n%s", full_err[-3000:])
         return None
     except subprocess.TimeoutExpired:
         log.error("Multiclip render timed out")
         return None
     if out.exists():
-        _write_music_sidecar(out, music)
         return out
     return None

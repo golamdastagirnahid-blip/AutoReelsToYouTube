@@ -134,30 +134,6 @@ def _check_unsplash(api_key: Optional[str]) -> tuple[bool, str]:
         return False, f"network error: {e}"
 
 
-def _check_jamendo(client_id: Optional[str]) -> tuple[bool, str]:
-    """Verify Jamendo API key via a 1-track query. Optional."""
-    if not client_id:
-        return False, "key missing (optional)"
-    try:
-        r = requests.get(
-            "https://api.jamendo.com/v3.0/tracks/",
-            params={"client_id": client_id, "format": "json",
-                    "limit": "1", "tags": "cinematic"},
-            timeout=10,
-        )
-        if r.status_code != 200:
-            return False, f"HTTP {r.status_code}: {r.text[:120]}"
-        data = r.json()
-        status = (data.get("headers") or {}).get("status", "")
-        if status == "success":
-            total = (data.get("headers") or {}).get("results_count", "?")
-            return True, f"OK (catalog reachable, {total} cinematic matches)"
-        err = (data.get("headers") or {}).get("error_message", "unknown")
-        return False, f"API error: {err}"
-    except requests.RequestException as e:
-        return False, f"network error: {e}"
-
-
 def _check_youtube_token(client_id: str, client_secret: str,
                         refresh_token: Optional[str]) -> tuple[bool, str]:
     """The most important check: actually exchange the refresh token for
@@ -240,15 +216,10 @@ def _check_config() -> tuple[bool, str]:
 
 
 def _check_data_dirs() -> tuple[bool, str]:
-    """Report on processed videos and music library."""
+    """Report on processed videos cached on disk."""
     proc_dir = _PROJECT_ROOT / "data" / "processed"
-    music_dir = _PROJECT_ROOT / "data" / "music"
     n_proc = len(list(proc_dir.glob("*_final.mp4"))) if proc_dir.exists() else 0
-    n_music = (len(list(music_dir.glob("**/*.mp3")))
-               + len(list(music_dir.glob("**/*.wav")))) \
-              if music_dir.exists() else 0
-    return True, (f"{n_proc} produced video(s) cached, "
-                 f"{n_music} music track(s) available")
+    return True, f"{n_proc} produced video(s) cached"
 
 
 # ============================================================
@@ -273,8 +244,6 @@ def _run_all(secrets: Secrets) -> list[tuple[str, bool, str, bool]]:
          lambda: _check_pixabay(secrets.pixabay_api_key), False),
         ("Unsplash API",
          lambda: _check_unsplash(secrets.unsplash_access_key), False),
-        ("Jamendo API (music)",
-         lambda: _check_jamendo(secrets.jamendo_client_id), False),
         ("YouTube OAuth (refresh+channel)",
          lambda: _check_youtube_token(
              secrets.youtube_client_id,

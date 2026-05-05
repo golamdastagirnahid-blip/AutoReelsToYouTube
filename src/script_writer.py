@@ -51,12 +51,35 @@ ACT 1 — HOOK (first 3 seconds, ~7-10 words)
    The hook MUST imply a payoff later — never give the answer in the hook.
 
 ACT 2 — BODY (60-75% of duration, the meat)
-   • Pay off the hook with 2-3 specific, concrete points
-   • Pattern interrupt every 5-7 words (new clause, new angle, new specific)
-   • Use SECOND PERSON ("you", "your") in every sentence
-   • Active verbs only — never passive voice
-   • Specific over generic: "300 calories" beats "some calories"
-   • Sentences max 12 words. Two short > one long.
+   GOLDEN RULE: SMALL BUT EFFECTIVE — say ONE core thing, not three.
+   A 28-second Short cannot teach three lessons. It can land ONE killer
+   insight that the viewer remembers tomorrow. Pick the single most
+   surprising / counter-intuitive / specific takeaway from the analysis
+   and build the entire body around it.
+
+   STRUCTURE:
+   • Sentence 1 of body = the ONE core insight, said directly. No buildup.
+   • Sentence 2-3 = ONE concrete detail that proves it (number, name,
+     example, mechanism). Specific beats abstract every time.
+   • Sentence 4 (optional) = a sharp contrast or twist that re-frames it.
+
+   STYLE RULES:
+   • Every sentence must EARN its place. If you can delete it without
+     losing meaning, delete it. Filler kills retention.
+   • Front-load the surprise. The most interesting fact comes FIRST,
+     not after "let me explain" or "here's the thing".
+   • Use SECOND PERSON ("you", "your") in most sentences.
+   • Active verbs only — never passive voice.
+   • Specific over generic: "300 calories" beats "some calories";
+     "a blue whale's heart" beats "a large animal's heart".
+   • Sentences max 10 words. Two short > one long.
+   • Pattern interrupt every 5-7 words (new clause, new angle, new specific).
+
+   BANNED FILLER PHRASES (drop these on sight):
+   "Let me tell you", "the truth is", "the fact is", "believe it or not",
+   "you won't believe", "basically", "literally", "actually", "honestly",
+   "you know", "so…", "well…", "now…", "in this video", "today we'll…",
+   "stay tuned", "keep watching", "here's the thing", "at the end of the day".
 
 ACT 3 — LOOPBACK CTA (last 2-3 seconds, ~5-8 words)
    Critical for retention + replays (algorithm boost):
@@ -69,27 +92,37 @@ ACT 3 — LOOPBACK CTA (last 2-3 seconds, ~5-8 words)
 HARD CONSTRAINTS
 ============================================================
 
-1. WORD COUNT: aim for `target_words` ± 10%. NEVER under 80% of target.
-2. HOOK_OVERLAY: max 4 words, max 14 characters total, no punctuation.
-   GOOD: "STOP DOING THIS", "94% FAIL THIS", "1 HABIT"
-   BAD:  "The Three Things You Need To Know" (too long, will be cut off)
-3. NO em-dashes, no semicolons, no parentheses in the script (TTS can't read them well).
-4. NO "subscribe", "like", "follow", channel name, or self-promo INSIDE the script.
-5. NO original-creator credits inside the script (those go in description only).
-6. NO made-up statistics — if the video analysis doesn't support a number, use ranges
-   ("most people", "many studies") instead.
-7. TITLE: must contain at least one POWER WORD: secret, truth, hidden, proven, science,
-   real, why, how, never, always, instantly, 1-minute, ultimate, mistake.
-8. Tone matches the niche (provided below) but always cinematic + confident.
-9. NO emojis ANYWHERE. NO hashtags inside the script or title.
-10. Output MUST be parseable JSON — no trailing commas, no comments.
+1.  WORD COUNT: aim for `target_words` ± 10%. NEVER under 80% of target.
+2.  HOOK_OVERLAY: max 4 words, max 14 characters total, no punctuation.
+    GOOD: "STOP DOING THIS", "94% FAIL THIS", "1 HABIT"
+    BAD:  "The Three Things You Need To Know" (too long, will be cut off)
+3.  ONE CORE INSIGHT per script. Not two, not three. ONE. The body proves
+    that single insight with concrete detail. Multiple loose tips dilute
+    retention; a single sharp idea wins.
+4.  NO em-dashes, no semicolons, no parentheses in the script (TTS can't read them well).
+5.  NO "subscribe", "like", "follow", channel name, or self-promo INSIDE the script.
+6.  NO original-creator credits inside the script (those go in description only).
+7.  NO made-up statistics — if the video analysis doesn't support a number, use ranges
+    ("most people", "many studies") instead.
+8.  NO filler / throat-clearing words at sentence starts: "so", "well", "now",
+    "basically", "actually", "literally", "honestly". Open every sentence with
+    a noun, verb, or number.
+9.  TITLE: must contain at least one POWER WORD: secret, truth, hidden, proven, science,
+    real, why, how, never, always, instantly, 1-minute, ultimate, mistake.
+10. Tone matches the niche (provided below) but always cinematic + confident.
+11. NO emojis ANYWHERE. NO hashtags inside the script or title.
+12. Output MUST be parseable JSON — no trailing commas, no comments.
 
 ============================================================
 SELF-CHECK before responding
 ============================================================
 ☐ Does the hook (first sentence of script) create a curiosity gap?
 ☐ Is hook_overlay ≤ 14 chars and ≤ 4 words?
-☐ Does the script have a payoff for the hook in the body?
+☐ Is there exactly ONE core insight in the body, not multiple competing ones?
+☐ Does the body's first sentence state the surprise directly (no buildup)?
+☐ Can ANY sentence be deleted without losing meaning? If yes, delete it.
+☐ Are all sentences ≤ 10 words and active-voice?
+☐ Are there ZERO filler phrases ("basically", "actually", "let me tell you", etc.)?
 ☐ Does the last sentence loop back / give a save-worthy takeaway?
 ☐ Word count within ±10% of target?
 ☐ Title has a power word and is under 95 chars?

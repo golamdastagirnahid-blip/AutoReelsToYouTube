@@ -132,6 +132,97 @@ niches:
     music_style: high-energy, rock, edm
     creator_profiles: []
 
+  # Animals & wildlife — rare species, behavior, hidden facts. Enormous
+  # curiosity gap: viewers click for "I didn't know that" reveals. Tons of
+  # royalty-free footage on Pexels/Pixabay (nature, wildlife, macro, ocean).
+  - name: animals
+    keywords:
+      - rare wildlife closeup
+      - deep sea creatures
+      - exotic bird tropical
+      - predator hunting slow motion
+      - insects macro extreme
+      - elephant herd savanna
+      - wolf pack snow
+      - octopus coral reef
+      - shark underwater blue
+      - frog rainforest macro
+      - owl night forest
+      - cheetah running speed
+    tiktok_keywords:
+      - animalfacts
+      - wildlife
+      - rareanimals
+      - natureisamazing
+      - animalbehavior
+      - crazyanimals
+      - didyouknowanimals
+    tone: fascinating, surprising, awe-inspiring
+    music_style: documentary, cinematic, curious
+    creator_profiles: []
+
+  # Space & cosmic science — galaxies, black holes, planets, hidden facts
+  # about the universe. Works brilliantly on Shorts: the "whoa, space is
+  # wild" hook is one of the top-performing templates of all time. NASA
+  # + ESA imagery is public domain; Pexels/Pixabay have endless renders.
+  - name: space_science
+    keywords:
+      - galaxy spiral nebula
+      - black hole visualization
+      - earth from space
+      - mars surface landscape
+      - astronaut spacewalk
+      - saturn rings closeup
+      - milky way night sky
+      - space telescope deep field
+      - solar flare sun
+      - meteor shower time lapse
+      - iss orbiting earth
+      - exoplanet distant world
+    tiktok_keywords:
+      - spacefacts
+      - cosmos
+      - astronomy
+      - universe
+      - nasa
+      - spaceexploration
+      - mindblown
+      - didyouknowspace
+    tone: mind-blowing, mysterious, awe-inspiring
+    music_style: epic, cinematic, cosmic-ambient
+    creator_profiles: []
+
+  # Remote & unexplored — deep ocean, abandoned places, ancient ruins,
+  # remote tribes, frozen wastelands. Pure curiosity bait: viewers can't
+  # scroll past "a place 99%% of humans will never see". Evergreen, high
+  # retention, and the content has no political / brand sensitivity risk.
+  - name: unexplored_world
+    keywords:
+      - deep ocean abyss
+      - abandoned place overgrown
+      - ancient ruins jungle
+      - amazon rainforest aerial
+      - arctic tundra frozen
+      - remote island drone
+      - underwater cave diving
+      - mountain cave dark
+      - sahara desert dunes
+      - volcanic crater steam
+      - ghost town empty
+      - mysterious underwater shipwreck
+    tiktok_keywords:
+      - unexplored
+      - hiddenplaces
+      - mysteries
+      - abandonedplaces
+      - deepsea
+      - remoteplaces
+      - explorer
+      - earthsecrets
+    tone: mysterious, adventurous, revealing
+    music_style: cinematic, suspenseful, atmospheric
+    creator_profiles: []
+
 # --------------------------------------------
 # SOURCES
 # --------------------------------------------

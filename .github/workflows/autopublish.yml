@@ -1,15 +1,18 @@
-name: AutoReels — produce & publish
+name: AutoReels — produce (generate videos)
 
+# PRODUCE-ONLY workflow. Uploads are handled by upload.yml on a 15-min
+# cron so scheduled slots fire within 15 min of their due time instead
+# of waiting up to 4h for this job.
 on:
   schedule:
-    # Runs every 4 hours. The pipeline picks up "due" slots only.
+    # Every 4h — producing a video is expensive (~3 min on GHA runners).
     - cron: "0 */4 * * *"
   workflow_dispatch:
     inputs:
       mode:
         description: "Pipeline mode"
         required: true
-        default: "full"
+        default: "produce"
         type: choice
         options: [produce, upload, full]
       niche:
@@ -25,7 +28,9 @@ permissions:
   contents: write   # so we can commit the SQLite tracker back to the repo
 
 concurrency:
-  group: autoreels
+  # Share the same group as upload.yml so produce and upload never run
+  # simultaneously and stomp on tracker.db.
+  group: autoreels-state
   cancel-in-progress: false
 
 jobs:
@@ -82,7 +87,10 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          MODE="${{ github.event.inputs.mode || 'full' }}"
+          # Scheduled runs default to `produce` (no upload here — upload.yml
+          # handles that on a 15-min cadence). Manual dispatch can still pick
+          # `full` if the user wants back-to-back produce+upload on demand.
+          MODE="${{ github.event.inputs.mode || 'produce' }}"
           NICHE="${{ github.event.inputs.niche }}"
           COUNT="${{ github.event.inputs.count || '1' }}"
           ARGS="$MODE --count $COUNT"

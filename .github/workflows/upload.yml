@@ -1,0 +1,75 @@
+name: AutoReels — upload (publish due slots)
+
+# LIGHTWEIGHT UPLOAD-ONLY workflow. Runs every 15 min so a scheduled slot
+# fires within 15 min of its due time instead of waiting for the 4h
+# produce cron (which would average ~2h lag per upload).
+#
+# Cost budget: ~20s per run x 96 runs/day = 32 min/day = 960 min/month.
+# GitHub free tier: unlimited on public repos, 2000 min/month private.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  # Shared with autopublish.yml so produce + upload serialize on tracker.db.
+  group: autoreels-state
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies (slim — upload path only)
+        # ffmpeg is NOT needed on the upload path — we only read the MP4
+        # from cache and hand it to the YouTube API. Skip the 30s apt-install.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Restore tracker DB + produced videos
+        # Same cache key pattern as autopublish.yml so both jobs see the
+        # same state. Read-only behavior here is enforced by the fact that
+        # we only run `src.main upload` which never writes new MP4s.
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/tracker.db
+            data/processed
+            data/sfx
+          key: autoreels-state-${{ github.run_id }}
+          restore-keys: |
+            autoreels-state-
+            tracker-db-
+
+      - name: Upload any due slots
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
+          OWNER_CONTACT_EMAIL: ${{ secrets.OWNER_CONTACT_EMAIL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        # `upload` mode is a no-op if no slots are due, so running every
+        # 15 min is cheap: it just queries the DB and exits.
+        run: python -m src.main upload --skip-health-check

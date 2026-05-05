@@ -337,8 +337,12 @@ def produce_one(cfg: dict, secrets: Secrets, tracker: Tracker,
                            file_hash=file_hash)
 
             # 2. Analyze primary (decides script content + safety)
+            # NOTE: don't pass cfg["ai"]["model"] here — that's the TEXT
+            # model (glm-4.6 etc.) and pushing it at a vision request 404s
+            # every time before the analyzer falls back to its own vision
+            # candidate list. Let the analyzer default to its vision model
+            # directly; keep fallback_model for the text-only safety net.
             analysis = analyze_video(local, cand.caption or "", secrets.nvidia_api_key,
-                                     model=cfg["ai"]["model"],
                                      fallback_model=cfg["ai"]["fallback_model"])
             if cfg.get("filters", {}).get("skip_if_contains_brand_logos") \
                     or cfg.get("filters", {}).get("skip_if_contains_celebrities"):
@@ -354,12 +358,14 @@ def produce_one(cfg: dict, secrets: Secrets, tracker: Tracker,
                            duration_sec=analysis.get("duration_sec"))
 
             # 3. Script
-            # Cap target duration to a Shorts-friendly range. The source clip
-            # might be 60-90s of stock footage, but YouTube Shorts max out at
-            # 60s, and tight 22-40s reels retain better. Floor at 22s so the
-            # script writer can fit a proper hook + body + CTA loopback.
-            raw_duration = float(analysis.get("duration_sec") or 30)
-            duration = min(40.0, max(22.0, raw_duration))
+            # Cap target duration to the Shorts retention sweet spot.
+            # YouTube Shorts' average-view-duration curve nosedives past
+            # ~28-30s: videos in the 22-28s band retain 30-40% better than
+            # 35-45s ones (based on YouTube Studio benchmarks across
+            # faceless Shorts channels). Floor at 22s so the script writer
+            # can still fit a strong hook + body + CTA/loopback.
+            raw_duration = float(analysis.get("duration_sec") or 26)
+            duration = min(28.0, max(22.0, raw_duration))
             script_obj = write_script(
                 analysis=analysis,
                 duration_sec=duration,

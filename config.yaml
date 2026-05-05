@@ -250,8 +250,12 @@ editing:
 upload:
   videos_per_day: 6
   humanize: true
-  window_start_hour: 8            # 08:00 local
-  window_end_hour: 23             # 23:00 local
+  # Hours are UTC (GitHub Actions runs in UTC). Global YouTube Shorts
+  # engagement peaks roughly 16:00-22:00 UTC (US afternoon/evening + EU
+  # evening). This 15:00-23:00 window concentrates all 6 daily slots
+  # inside/adjacent to that peak for maximum first-hour impressions.
+  window_start_hour: 15           # 15:00 UTC (= 11:00 EDT / 17:00 CEST / 23:00 ICT)
+  window_end_hour: 23             # 23:00 UTC (= 19:00 EDT / 01:00 CEST+1 / 07:00 ICT+1)
   jitter_minutes: 35              # ± random offset per slot
   description_template: |
     {ai_description}

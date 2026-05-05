@@ -34,6 +34,7 @@ from src.downloader import download, download_to, hash_file
 from src.editor import edit_video, edit_video_multiclip
 from src.script_writer import extract_visual_concepts, write_script
 from src.scheduler import humanized_slots
+from src.trend_seeder import fetch_trending_for_niche
 from src.uploader import upload_short
 from src.utils.db import Tracker
 from src.utils.secrets import Secrets
@@ -366,6 +367,17 @@ def produce_one(cfg: dict, secrets: Secrets, tracker: Tracker,
             # can still fit a strong hook + body + CTA/loopback.
             raw_duration = float(analysis.get("duration_sec") or 26)
             duration = min(28.0, max(22.0, raw_duration))
+
+            # Trending-topic seeding: pull today's top Reddit post titles
+            # for this niche and feed them to the script writer as "what
+            # people are discussing right now" context. Cached per niche
+            # for 6h so this is cheap. Returns None when disabled/blocked
+            # — write_script() handles None gracefully.
+            trending = fetch_trending_for_niche(cfg, niche, tracker=tracker)
+            if trending:
+                log.info("Trending context: %d Reddit title(s) for niche=%s",
+                         len(trending), niche["name"])
+
             script_obj = write_script(
                 analysis=analysis,
                 duration_sec=duration,
@@ -374,6 +386,7 @@ def produce_one(cfg: dict, secrets: Secrets, tracker: Tracker,
                 nvidia_api_key=secrets.nvidia_api_key,
                 model=cfg["ai"]["fallback_model"],
                 style=cfg["script"]["style"],
+                trending_titles=trending,
             )
             tracker.update(vid, status="scripted",
                            script_text=json.dumps(script_obj))

@@ -148,6 +148,7 @@ def write_script(
     model: str = _DEFAULT_MODEL,
     style: str = "informative, professional, engaging",
     min_duration_sec: float = 22.0,
+    trending_titles: Optional[list[str]] = None,
 ) -> dict:
     """Generate a viral Shorts script with a strict 3-act structure.
 
@@ -155,10 +156,33 @@ def write_script(
         min_duration_sec: enforce a minimum target duration (default 22s).
             YouTube Shorts under 20s have notably worse retention/CPM.
             We bump short videos up to give the script room for hook + body + payoff.
+        trending_titles: optional list of Reddit top-of-day post titles for
+            the niche. When provided they're injected into the prompt as
+            "what people are discussing right now" context so the script
+            stays tied to live conversation. Titles are used as INSPIRATION
+            only — the script must NOT copy them verbatim.
     """
     # Force a minimum target so we don't end up with a 7-second video
     effective_duration = max(min_duration_sec, duration_sec)
     target_words = max(60, int(effective_duration * 2.5))
+
+    # Optional "what people are talking about right now" block.
+    # Capped at 8 titles and 140 chars each to keep the prompt compact.
+    trending_block = ""
+    if trending_titles:
+        clipped = [
+            (t[:140].rstrip() + ("…" if len(t) > 140 else ""))
+            for t in trending_titles[:8] if t
+        ]
+        if clipped:
+            trending_block = (
+                "Trending discussion titles in this niche RIGHT NOW "
+                "(from Reddit top-of-day — use as INSPIRATION for a timely "
+                "hook or angle, do NOT copy verbatim, do NOT mention Reddit):\n"
+                + "\n".join(f"  - {t}" for t in clipped)
+                + "\n\n"
+            )
+
     user_prompt = (
         f"Niche: {niche}\n"
         f"Desired tone: {tone}\n"
@@ -167,6 +191,7 @@ def write_script(
         f"(WRITE EXACTLY {target_words} words ± 10%)\n\n"
         f"Video analysis (use as INSPIRATION for visuals/topic, do not copy):\n"
         f"{json.dumps(analysis, ensure_ascii=False)[:3000]}\n\n"
+        f"{trending_block}"
         f"Now write the JSON output. Self-check before submitting."
     )
     client = OpenAI(api_key=nvidia_api_key, base_url=_NVIDIA_BASE_URL)

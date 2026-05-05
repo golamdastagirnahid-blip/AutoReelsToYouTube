@@ -37,6 +37,13 @@ niches:
       - inspiration
       - grind
       - hustle
+    # Subreddits the trend_seeder polls for top-24h discussion titles.
+    # These feed the script writer as "what people are talking about right now"
+    # context, nudging the LLM to hook into currently-hot conversations.
+    trending_subreddits:
+      - GetMotivated
+      - selfimprovement
+      - DecidingToBeBetter
     tone: powerful, inspiring, urgent
     music_style: epic, cinematic, uplifting
     # Curated public Instagram profiles. Empty = skip Instagram.
@@ -61,6 +68,10 @@ niches:
       - braintricks
       - humanbehavior
       - didyouknow
+    trending_subreddits:
+      - psychology
+      - AskPsychology
+      - Showerthoughts
     tone: curious, intriguing, factual
     music_style: mysterious, ambient
     creator_profiles: []
@@ -85,6 +96,10 @@ niches:
       - gadgets
       - techtips
       - techtok
+    trending_subreddits:
+      - technology
+      - Futurology
+      - gadgets
     tone: exciting, futuristic, informative
     music_style: electronic, tech
     creator_profiles: []
@@ -106,6 +121,10 @@ niches:
       - productivity
       - dailytips
       - householdtips
+    trending_subreddits:
+      - LifeProTips
+      - YouShouldKnow
+      - productivity
     tone: friendly, helpful, clear
     music_style: upbeat, positive
     creator_profiles: []
@@ -128,6 +147,10 @@ niches:
       - fitnesstips
       - gymmotivation
       - fittok
+    trending_subreddits:
+      - Fitness
+      - bodyweightfitness
+      - xxfitness
     tone: energetic, motivating
     music_style: high-energy, rock, edm
     creator_profiles: []
@@ -157,6 +180,11 @@ niches:
       - animalbehavior
       - crazyanimals
       - didyouknowanimals
+    trending_subreddits:
+      - natureisfuckinglit
+      - Awwducational
+      - likeus
+      - wildlife
     tone: fascinating, surprising, awe-inspiring
     music_style: documentary, cinematic, curious
     creator_profiles: []
@@ -188,6 +216,11 @@ niches:
       - spaceexploration
       - mindblown
       - didyouknowspace
+    trending_subreddits:
+      - space
+      - Astronomy
+      - spaceporn
+      - nasa
     tone: mind-blowing, mysterious, awe-inspiring
     music_style: epic, cinematic, cosmic-ambient
     creator_profiles: []
@@ -219,9 +252,67 @@ niches:
       - remoteplaces
       - explorer
       - earthsecrets
+    trending_subreddits:
+      - AbandonedPorn
+      - MostBeautiful
+      - CityPorn
+      - EarthPorn
+      - UrbanExploration
     tone: mysterious, adventurous, revealing
     music_style: cinematic, suspenseful, atmospheric
     creator_profiles: []
+
+  # AI & machine learning — absolutely dominant demand signal in 2025-2026.
+  # The "latest surprising AI capability" hook is top-tier viral template.
+  # Pulls trending discussion titles from r/MachineLearning, r/OpenAI,
+  # r/singularity so scripts stay tied to what actually broke today.
+  - name: ai_facts
+    keywords:
+      - artificial intelligence brain
+      - robot humanoid walking
+      - neural network visualization
+      - data center servers blue
+      - circuit board macro glow
+      - futuristic interface hologram
+      - quantum computer abstract
+      - machine vision eye
+      - ai generated art abstract
+      - chatbot interface screen
+      - autonomous vehicle self driving
+      - scientist laboratory technology
+    tiktok_keywords:
+      - ai
+      - artificialintelligence
+      - chatgpt
+      - aifacts
+      - aitools
+      - machinelearning
+      - futuretech
+      - aiart
+    trending_subreddits:
+      - MachineLearning
+      - OpenAI
+      - singularity
+      - artificial
+      - LocalLLaMA
+    tone: exciting, cutting-edge, mind-blowing
+    music_style: electronic, tech, cinematic-modern
+    creator_profiles: []
+
+# --------------------------------------------
+# TRENDING-TOPIC SEEDING (Reddit)
+# --------------------------------------------
+# The trend_seeder module polls the per-niche trending_subreddits above
+# and feeds the top post titles into the script LLM prompt. This keeps
+# generated scripts aligned with what people are actually discussing NOW
+# rather than evergreen advice. See src/trend_seeder.py.
+trending:
+  enabled: true
+  posts_per_niche: 6            # how many top-of-day titles to seed the LLM with
+  cache_ttl_hours: 6            # re-fetch Reddit at most every 6h per niche
+  # Reddit requires a descriptive User-Agent. Change this if you fork the
+  # repo so you're identifiable per Reddit's API terms.
+  user_agent: "AutoReels-Bot/1.0 (by /u/autoreels-dev)"
 
 # --------------------------------------------
 # SOURCES

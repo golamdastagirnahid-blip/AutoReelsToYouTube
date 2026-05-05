@@ -554,9 +554,32 @@ def upload_due(cfg: dict, secrets: Secrets, tracker: Tracker) -> int:
         log.error("YOUTUBE_REFRESH_TOKEN missing")
         return 0
 
+    # Hard safety rail: stop uploading if we already hit today's cap.
+    # YouTube Data API v3 default quota = 10,000 units/day, each upload
+    # costs 1,600 units. If some scheduler bug or double-run ever put
+    # too many slots in one day, this prevents us from burning the
+    # full daily quota and getting locked out for 24h.
+    daily_cap = int(cfg["upload"]["videos_per_day"])
+    already = tracker.uploads_last_24h()
+    if already >= daily_cap:
+        log.warning(
+            "Daily upload cap reached: %d/%d in the last 24h. "
+            "Skipping this upload cycle to preserve YouTube API quota.",
+            already, daily_cap,
+        )
+        return 0
+    remaining_budget = daily_cap - already
+
     posted = 0
     due = tracker.due_uploads(_utc_now())
     for row in due:
+        # Don't exceed today's remaining budget even if multiple slots
+        # happen to be due at the same time.
+        if posted >= remaining_budget:
+            log.info("Reached remaining daily budget (%d). Deferring %d due "
+                     "slot(s) to the next cycle.",
+                     remaining_budget, len(due) - posted)
+            break
         vid = int(row["id"])
         edited_path = row["edited_path"]
         if not edited_path or not Path(edited_path).exists():

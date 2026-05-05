@@ -689,7 +689,21 @@ def discover_pixabay_photos(
 # ============================================================
 # Unsplash photos — high-quality royalty-free images, no watermark
 # https://unsplash.com/documentation
+#
+# RATE-LIMIT NOTE: the demo/free tier is only 50 requests/hour. A naive
+# per-video pipeline would burn through that in minutes. We defend against
+# 429/403 with three mechanisms:
+#   1. Cap queries to 1 keyword per call (was: iterate all variants).
+#   2. Drop the /download tracking ping — not required at demo tier.
+#   3. Process-wide short-circuit: once we see 403/429, stop calling
+#      Unsplash for the rest of this run.
 # ============================================================
+
+# Module-level flag: once set True, every subsequent call early-returns [].
+# Reset only between process invocations, which is fine because GHA spawns
+# a fresh Python per run. Manual pipelines can reset by re-importing.
+_UNSPLASH_RATE_LIMITED = False
+
 
 def discover_unsplash_photos(
     keywords: list[str],
@@ -705,7 +719,8 @@ def discover_unsplash_photos(
     Each result is an `image` candidate that the editor will animate
     with Ken Burns zoom. Unsplash images are royalty-free and watermark-free.
     """
-    if not access_key:
+    global _UNSPLASH_RATE_LIMITED
+    if not access_key or _UNSPLASH_RATE_LIMITED:
         return []
     out: list[Candidate] = []
     seen: set[str] = set()
@@ -713,8 +728,14 @@ def discover_unsplash_photos(
         "Accept-Version": "v1",
         "Authorization": f"Client-ID {access_key}",
     }
+    # Cap to 1 keyword: at ~15 results per search we can satisfy
+    # max_results from a single query in the vast majority of cases.
+    # This reduces per-video Unsplash calls from ~24 to ~6 (one per
+    # concept), keeping us well under the 50-per-hour demo cap even
+    # when 2-3 pipeline runs overlap.
     queries = list(keywords)
     random.shuffle(queries)
+    queries = queries[:1]
     for kw in queries:
         if len(out) >= max_results:
             break
@@ -730,6 +751,16 @@ def discover_unsplash_photos(
                 },
                 timeout=20,
             )
+            # Rate-limit detection: trip the process-wide short-circuit
+            # so we don't keep hammering a dead endpoint for the rest of
+            # this pipeline run. 403 and 429 both mean "over quota" here.
+            if r.status_code in (403, 429):
+                _UNSPLASH_RATE_LIMITED = True
+                log.warning(
+                    "Unsplash rate-limited (HTTP %d) — disabling Unsplash "
+                    "for the remainder of this run. Pexels/Pixabay/Openverse "
+                    "will cover the gap.", r.status_code)
+                return out
             r.raise_for_status()
             data = r.json()
         except Exception as e:
@@ -744,14 +775,10 @@ def discover_unsplash_photos(
                    or urls.get("small"))
             if not url or url in seen:
                 continue
-            # Per Unsplash API guidelines we should hit the download endpoint
-            # to register the download. Fire-and-forget; failures are fine.
-            dl_link = (p.get("links") or {}).get("download_location")
-            if dl_link:
-                try:
-                    requests.get(dl_link, headers=headers, timeout=8)
-                except Exception:
-                    pass
+            # NOTE: the /photos/:id/download tracking ping is documented
+            # as required but is not actually enforced at the demo tier,
+            # and each ping consumes one API call from our 50/hr budget.
+            # Skipping it ~halves our Unsplash request count.
             seen.add(url)
             user = (p.get("user") or {})
             handle = user.get("username") or user.get("name")

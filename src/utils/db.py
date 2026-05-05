@@ -155,6 +155,22 @@ class Tracker:
                 )
             )
 
+    def uploads_last_24h(self) -> int:
+        """Count videos marked uploaded in the last 24 hours.
+
+        Hard safety rail for YouTube Data API v3 quota. Each videos.insert
+        costs 1,600 units; the default daily quota is 10,000. If this count
+        is already >= videos_per_day the caller MUST NOT upload more today
+        or the remainder of uploads will 403 with quotaExceeded for 24h.
+        """
+        with self.connect() as c:
+            row = c.execute(
+                "SELECT COUNT(*) AS n FROM videos "
+                "WHERE status = 'uploaded' "
+                "AND updated_at >= datetime('now', '-24 hours')"
+            ).fetchone()
+            return int(row["n"]) if row else 0
+
     # ---------------- blocklist ----------------
 
     def is_blocked(self, creator_handle: str) -> bool:

@@ -248,11 +248,16 @@ editing:
 # UPLOAD SCHEDULE
 # --------------------------------------------
 upload:
-  videos_per_day: 6
+  # 5/day not 6: YouTube Data API v3 default quota is 10,000 units/day, and
+  # each videos.insert costs 1,600 units. 5 uploads = 8,000 units, giving
+  # a 20% safety headroom for retries + auxiliary calls (channels.list,
+  # playlistItems.insert etc.). 6/day = 9,600 units and any single retry
+  # tips the whole day over → all further uploads blocked for 24h.
+  videos_per_day: 5
   humanize: true
   # Hours are UTC (GitHub Actions runs in UTC). Global YouTube Shorts
   # engagement peaks roughly 16:00-22:00 UTC (US afternoon/evening + EU
-  # evening). This 15:00-23:00 window concentrates all 6 daily slots
+  # evening). This 15:00-23:00 window concentrates all 5 daily slots
   # inside/adjacent to that peak for maximum first-hour impressions.
   window_start_hour: 15           # 15:00 UTC (= 11:00 EDT / 17:00 CEST / 23:00 ICT)
   window_end_hour: 23             # 23:00 UTC (= 19:00 EDT / 01:00 CEST+1 / 07:00 ICT+1)

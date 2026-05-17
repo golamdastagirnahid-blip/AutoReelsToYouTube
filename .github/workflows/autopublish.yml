@@ -4,9 +4,11 @@ name: AutoReels — produce (generate videos)
 # cron so scheduled slots fire within 15 min of their due time instead
 # of waiting up to 4h for this job.
 on:
-  schedule:
-    # Every 4h — producing a video is expensive (~3 min on GHA runners).
-    - cron: "0 */4 * * *"
+  # PAUSED — automatic schedule disabled by user request.
+  # To resume: uncomment the `schedule` block below.
+  # schedule:
+  #   # Every 4h — producing a video is expensive (~3 min on GHA runners).
+  #   - cron: "0 */4 * * *"
   workflow_dispatch:
     inputs:
       mode:

@@ -8,8 +8,10 @@ name: AutoReels — upload (publish due slots)
 # GitHub free tier: unlimited on public repos, 2000 min/month private.
 
 on:
-  schedule:
-    - cron: "*/15 * * * *"
+  # PAUSED — automatic schedule disabled by user request.
+  # To resume: uncomment the `schedule` block below.
+  # schedule:
+  #   - cron: "*/15 * * * *"
   workflow_dispatch:
 
 permissions:
